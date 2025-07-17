@@ -1,44 +1,39 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Head, useForm } from '@inertiajs/react';
 import AppLayout from '@/Layouts/AppLayout';
 import { Card, CardHeader, CardTitle, CardContent } from '@/Components/ui/card';
 import { Button } from '@/Components/ui/button';
 
-export default function StaffAttendance({ auth, staff, todayAttendance, school }) {
-  const { data, setData, post, processing, errors } = useForm({
-    attendance: []
+export default function StaffAttendance({ auth, staff, todayAttendance }) {
+  const [attendance, setAttendance] = useState(() => {
+    const initial = {};
+    staff.forEach((s) => {
+      const existing = todayAttendance.find((a) => a.staff_id === s.id);
+      initial[s.id] = existing ? existing.status : 'present'; // default
+    });
+    return initial;
   });
 
-  // Initialize attendance data
-  useEffect(() => {
-    const initialAttendance = staff.map((s) => {
-      const existing = todayAttendance[s.id]; // Using keyed object now
-      return {
-        staff_id: s.id,
-        status: existing ? existing.status : 'present'
-      };
-    });
-    setData('attendance', initialAttendance);
-  }, [staff, todayAttendance]);
-
-  const handleStatusChange = (staffId, newStatus) => {
-    const updatedAttendance = data.attendance.map(item => 
-      item.staff_id === staffId 
-        ? { ...item, status: newStatus }
-        : item
-    );
-    setData('attendance', updatedAttendance);
-  };
+  const { post, processing } = useForm();
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    
-    // Debug logging
-    console.log('Submitting attendance:', data.attendance);
-    console.log('School ID:', school?.id || auth.user.school_id);
 
-    post(route('staff-attendance.store', school?.id || auth.user.school_id), {
-      preserveScroll: true,
+    console.log('auth.user.school_id:', auth.user.school_id);
+    console.log('route:', route('staff-attendance.store', auth.user.school_id));
+
+    const payload = staff.map((s) => ({
+      staff_id: s.id,
+      status: attendance[s.id],
+    }));
+
+    post(
+      route('staff-attendance.store', auth.user.school_id),
+      {
+        attendance: payload,
+      },
+      {
+        preserveScroll: true,
       onSuccess: () => {
         console.log('Attendance saved successfully.');
       },
@@ -47,11 +42,6 @@ export default function StaffAttendance({ auth, staff, todayAttendance, school }
       },
     });
   };
-
-  // Debug logging
-  console.log('Staff data:', staff);
-  console.log('Today attendance:', todayAttendance);
-  console.log('Current form data:', data);
 
   return (
     <>
@@ -64,72 +54,45 @@ export default function StaffAttendance({ auth, staff, todayAttendance, school }
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {/* Display any validation errors */}
-            {Object.keys(errors).length > 0 && (
-              <div className="mb-4 p-4 bg-red-100 border border-red-400 rounded">
-                <h4 className="font-semibold text-red-800">Please correct the following errors:</h4>
-                <ul className="mt-2 text-red-700">
-                  {Object.entries(errors).map(([key, error]) => (
-                    <li key={key}>{error}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
             <form onSubmit={handleSubmit}>
               <div className="overflow-x-auto">
                 <table className="min-w-full border text-sm mb-4">
                   <thead>
                     <tr className="bg-gray-100">
-                      <th className="p-2 text-left border">Name</th>
-                      <th className="p-2 text-left border">Department</th>
-                      <th className="p-2 text-left border">Status</th>
+                      <th className="p-2">Name</th>
+                      <th className="p-2">Department</th>
+                      <th className="p-2">Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {staff.length > 0 ? (
-                      staff.map((s) => {
-                        const currentAttendance = data.attendance.find(a => a.staff_id === s.id);
-                        return (
-                          <tr key={s.id} className="border-t">
-                            <td className="p-2 border">{s.user?.name || 'N/A'}</td>
-                            <td className="p-2 border">{s.department?.name || '—'}</td>
-                            <td className="p-2 border">
-                              <select
-                                className="border rounded p-1 w-full"
-                                value={currentAttendance?.status || 'present'}
-                                onChange={(e) => handleStatusChange(s.id, e.target.value)}
-                              >
-                                <option value="present">Present</option>
-                                <option value="absent">Absent</option>
-                              </select>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    ) : (
-                      <tr>
-                        <td colSpan="3" className="p-4 text-center text-gray-500">
-                          No staff members found.
+                    {staff.map((s) => (
+                      <tr key={s.id} className="border-t">
+                        <td className="p-2">{s.user.name}</td>
+                        <td className="p-2">{s.department?.name || '—'}</td>
+                        <td className="p-2">
+                          <select
+                            name={`attendance[${s.id}]`}
+                            className="border rounded p-1"
+                            value={attendance[s.id]}
+                            onChange={(e) =>
+                              setAttendance((prev) => ({
+                                ...prev,
+                                [s.id]: e.target.value,
+                              }))
+                            }
+                          >
+                            <option value="present">Present</option>
+                            <option value="absent">Absent</option>
+                          </select>
                         </td>
                       </tr>
-                    )}
+                    ))}
                   </tbody>
                 </table>
               </div>
-              
-              <div className="flex justify-between items-center">
-                <p className="text-sm text-gray-600">
-                  Total Staff: {staff.length}
-                </p>
-                <Button 
-                  type="submit" 
-                  disabled={processing || staff.length === 0}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  {processing ? 'Saving...' : 'Save Attendance'}
-                </Button>
-              </div>
+              <Button type="submit" disabled={processing}>
+                Save Attendance
+              </Button>
             </form>
           </CardContent>
         </Card>

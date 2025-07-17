@@ -20,8 +20,10 @@ class BookController extends Controller
 
     public function create(School $school)
     {
+        $bookCategories = \App\Models\BookCategory::where('school_id', $school->id)->get();
         return Inertia::render('SchoolAdmin/Library/Books/Create', [
             'school' => $school,
+            'bookCategories' => $bookCategories,
         ]);
     }
 
