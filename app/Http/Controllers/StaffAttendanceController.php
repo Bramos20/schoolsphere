@@ -56,11 +56,13 @@ class StaffAttendanceController extends Controller
 
     public function store(StoreStaffAttendanceRequest $request, School $school)
     {
+
         Log::info('Attendance data received:', $request->all());
 
         $today = now()->toDateString();
 
         foreach ($request->validated()['attendance'] as $record) {
+
             $staff = Staff::find($record['staff_id']);
             if ($staff && $staff->school_id === $school->id) {
                 $attendance = StaffAttendance::updateOrCreate(
@@ -74,6 +76,7 @@ class StaffAttendanceController extends Controller
                 );
             }
         }
+        \Log::info('SQL queries:', \DB::getQueryLog());
 
         return redirect()->back()->with('success', 'Attendance saved successfully.');
     }
