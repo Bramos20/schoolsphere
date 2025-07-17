@@ -15,18 +15,7 @@ class StoreStaffAttendanceRequest extends FormRequest
         $user = Auth::user();
         $school = $this->route('school');
 
-        // Check if user has required roles
-        if ($user->hasRole('school_admin')) {
-            return true;
-        }
-
-        if ($user->hasRole('hod')) {
-            // Check if user is staff of this school
-            $staff = $user->staff;
-            return $staff && $staff->school_id === $school->id;
-        }
-
-        return false;
+        return $user->hasRole('school_admin') || ($user->hasRole('hod') && $user->school_id === $school->id);
     }
 
     /**
@@ -40,21 +29,6 @@ class StoreStaffAttendanceRequest extends FormRequest
             'attendance' => 'required|array',
             'attendance.*.staff_id' => 'required|exists:staff,id',
             'attendance.*.status' => 'required|in:present,absent',
-        ];
-    }
-
-    /**
-     * Get custom error messages for validation rules.
-     */
-    public function messages(): array
-    {
-        return [
-            'attendance.required' => 'Attendance data is required.',
-            'attendance.array' => 'Attendance must be an array.',
-            'attendance.*.staff_id.required' => 'Staff ID is required for each attendance record.',
-            'attendance.*.staff_id.exists' => 'Selected staff member does not exist.',
-            'attendance.*.status.required' => 'Status is required for each attendance record.',
-            'attendance.*.status.in' => 'Status must be either present or absent.',
         ];
     }
 }
