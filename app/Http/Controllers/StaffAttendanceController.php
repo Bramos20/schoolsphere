@@ -8,6 +8,7 @@ use App\Models\StaffAttendance;
 use App\Http\Requests\StoreStaffAttendanceRequest;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class StaffAttendanceController extends Controller
 {
@@ -40,7 +41,8 @@ class StaffAttendanceController extends Controller
 
         $todayAttendance = StaffAttendance::whereDate('date', $today)
             ->whereIn('staff_id', $staff->pluck('id'))
-            ->get();
+            ->get()
+            ->keyBy('staff_id'); // Key by staff_id for easier lookup
 
         return Inertia::render('SchoolAdmin/StaffAttendance', [
             'auth' => [
@@ -48,36 +50,34 @@ class StaffAttendanceController extends Controller
             ],
             'staff' => $staff,
             'todayAttendance' => $todayAttendance,
+            'school' => $school, // Add school data
         ]);
     }
 
     public function store(StoreStaffAttendanceRequest $request, School $school)
     {
-        \Log::info('StaffAttendanceController@store called');
-        \Log::info('Request data:', $request->all());
-        \DB::enableQueryLog();
+
+        Log::info('Attendance data received:', $request->all());
 
         $today = now()->toDateString();
 
         foreach ($request->validated()['attendance'] as $record) {
-            \Log::info('Processing record:', $record);
+
             $staff = Staff::find($record['staff_id']);
-            \Log::info('Staff found:', ['staff' => $staff]);
             if ($staff && $staff->school_id === $school->id) {
-                \Log::info('Staff belongs to the correct school');
-                $attendance = StaffAttendance::firstOrNew([
-                    'staff_id' => $record['staff_id'],
-                    'date' => $today
-                ]);
-                $attendance->status = $record['status'];
-                $attendance->save();
-                \Log::info('Attendance record saved:', ['attendance' => $attendance]);
-            } else {
-                \Log::warning('Staff not found or does not belong to the correct school', ['staff_id' => $record['staff_id'], 'school_id' => $school->id]);
+                $attendance = StaffAttendance::updateOrCreate(
+                    [
+                        'staff_id' => $record['staff_id'],
+                        'date' => $today
+                    ],
+                    [
+                        'status' => $record['status']
+                    ]
+                );
             }
         }
         \Log::info('SQL queries:', \DB::getQueryLog());
 
-        return redirect()->back()->with('success', 'Attendance saved.');
+        return redirect()->back()->with('success', 'Attendance saved successfully.');
     }
 }
