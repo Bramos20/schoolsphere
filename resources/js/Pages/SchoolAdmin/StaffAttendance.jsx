@@ -19,16 +19,21 @@ export default function StaffAttendance({ auth, staff, todayAttendance }) {
   const handleSubmit = (e) => {
     e.preventDefault();
 
+    console.log('auth.user.school_id:', auth.user.school_id);
+    console.log('route:', route('staff-attendance.store', auth.user.school_id));
+
     const payload = staff.map((s) => ({
       staff_id: s.id,
       status: attendance[s.id],
     }));
 
-    post(route('staff-attendance.store', auth.user.school_id), {
-      data: {
+    post(
+      route('staff-attendance.store', auth.user.school_id),
+      {
         attendance: payload,
       },
-      preserveScroll: true,
+      {
+        preserveScroll: true,
       onSuccess: () => {
         console.log('Attendance saved successfully.');
       },
@@ -66,6 +71,7 @@ export default function StaffAttendance({ auth, staff, todayAttendance }) {
                         <td className="p-2">{s.department?.name || '—'}</td>
                         <td className="p-2">
                           <select
+                            name={`attendance[${s.id}]`}
                             className="border rounded p-1"
                             value={attendance[s.id]}
                             onChange={(e) =>

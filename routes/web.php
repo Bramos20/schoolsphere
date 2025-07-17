@@ -100,6 +100,10 @@ Route::middleware(['auth', 'role:company_admin'])->group(function () {
 |--------------------------------------------------------------------------
 */
 Route::middleware(['auth', 'role:school_admin'])->group(function () {
+    Route::resource('/schools/{school}/books', BookController::class);
+    Route::resource('/schools/{school}/book-categories', BookCategoryController::class);
+    Route::resource('/schools/{school}/book-issues', BookIssueController::class);
+
     Route::get('/schools/{school}/departments', [DepartmentController::class, 'index'])->name('departments.index');
     Route::post('/schools/{school}/departments', [DepartmentController::class, 'store'])->name('departments.store');
 

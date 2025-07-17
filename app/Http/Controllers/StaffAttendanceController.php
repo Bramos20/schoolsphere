@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Staff;
 use App\Models\School;
 use App\Models\StaffAttendance;
-use Illuminate\Http\Request;
+use App\Http\Requests\StoreStaffAttendanceRequest;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
 
@@ -51,30 +51,32 @@ class StaffAttendanceController extends Controller
         ]);
     }
 
-    public function store(Request $request, School $school)
+    public function store(StoreStaffAttendanceRequest $request, School $school)
     {
-        $user = Auth::user();
-
-        // Only school_admin or HOD can mark attendance
-        if (!$user->hasRole('school_admin') && !$user->hasRole('hod')) {
-            abort(403, 'Unauthorized');
-        }
-
-        $request->validate([
-            'attendance' => 'required|array',
-            'attendance.*.staff_id' => 'required|exists:staff,id',
-            'attendance.*.status' => 'required|in:present,absent',
-        ]);
+        \Log::info('StaffAttendanceController@store called');
+        \Log::info('Request data:', $request->all());
+        \DB::enableQueryLog();
 
         $today = now()->toDateString();
 
-        foreach ($request->attendance as $record) {
-            \Log::info('Storing attendance for:', $record);
-            StaffAttendance::updateOrCreate(
-                ['staff_id' => $record['staff_id'], 'date' => $today],
-                ['status' => $record['status']]
-            );
+        foreach ($request->validated()['attendance'] as $record) {
+            \Log::info('Processing record:', $record);
+            $staff = Staff::find($record['staff_id']);
+            \Log::info('Staff found:', ['staff' => $staff]);
+            if ($staff && $staff->school_id === $school->id) {
+                \Log::info('Staff belongs to the correct school');
+                $attendance = StaffAttendance::firstOrNew([
+                    'staff_id' => $record['staff_id'],
+                    'date' => $today
+                ]);
+                $attendance->status = $record['status'];
+                $attendance->save();
+                \Log::info('Attendance record saved:', ['attendance' => $attendance]);
+            } else {
+                \Log::warning('Staff not found or does not belong to the correct school', ['staff_id' => $record['staff_id'], 'school_id' => $school->id]);
+            }
         }
+        \Log::info('SQL queries:', \DB::getQueryLog());
 
         return redirect()->back()->with('success', 'Attendance saved.');
     }
