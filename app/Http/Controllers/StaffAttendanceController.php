@@ -5,9 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\Staff;
 use App\Models\School;
 use App\Models\StaffAttendance;
-use Illuminate\Http\Request;
+use App\Http\Requests\StoreStaffAttendanceRequest;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class StaffAttendanceController extends Controller
 {
@@ -40,7 +41,8 @@ class StaffAttendanceController extends Controller
 
         $todayAttendance = StaffAttendance::whereDate('date', $today)
             ->whereIn('staff_id', $staff->pluck('id'))
-            ->get();
+            ->get()
+            ->keyBy('staff_id'); // Key by staff_id for easier lookup
 
         return Inertia::render('SchoolAdmin/StaffAttendance', [
             'auth' => [
@@ -48,34 +50,31 @@ class StaffAttendanceController extends Controller
             ],
             'staff' => $staff,
             'todayAttendance' => $todayAttendance,
+            'school' => $school, // Add school data
         ]);
     }
 
-    public function store(Request $request, School $school)
+    public function store(StoreStaffAttendanceRequest $request, School $school)
     {
-        $user = Auth::user();
-
-        // Only school_admin or HOD can mark attendance
-        if (!$user->hasRole('school_admin') && !$user->hasRole('hod')) {
-            abort(403, 'Unauthorized');
-        }
-
-        $request->validate([
-            'attendance' => 'required|array',
-            'attendance.*.staff_id' => 'required|exists:staff,id',
-            'attendance.*.status' => 'required|in:present,absent',
-        ]);
+        Log::info('Attendance data received:', $request->all());
 
         $today = now()->toDateString();
 
-        foreach ($request->attendance as $record) {
-            \Log::info('Storing attendance for:', $record);
-            StaffAttendance::updateOrCreate(
-                ['staff_id' => $record['staff_id'], 'date' => $today],
-                ['status' => $record['status']]
-            );
+        foreach ($request->validated()['attendance'] as $record) {
+            $staff = Staff::find($record['staff_id']);
+            if ($staff && $staff->school_id === $school->id) {
+                $attendance = StaffAttendance::updateOrCreate(
+                    [
+                        'staff_id' => $record['staff_id'],
+                        'date' => $today
+                    ],
+                    [
+                        'status' => $record['status']
+                    ]
+                );
+            }
         }
 
-        return redirect()->back()->with('success', 'Attendance saved.');
+        return redirect()->back()->with('success', 'Attendance saved successfully.');
     }
 }
