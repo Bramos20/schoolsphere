@@ -5,7 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\BookIssue;
 use App\Models\School;
 use App\Models\Book;
-use App\Models\User;
+use App\Models\Student;
+use App\Models\Staff;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -23,11 +24,15 @@ class BookIssueController extends Controller
     public function create(School $school)
     {
         $books = Book::where('school_id', $school->id)->where('available', '>', 0)->get();
-        $users = User::where('school_id', $school->id)->get();
+        $students = Student::where('school_id', $school->id)->with('user', 'stream')->get();
+        $staff = Staff::where('school_id', $school->id)->with('user')->get();
+        $classes = \App\Models\SchoolClass::where('school_id', $school->id)->with('streams')->get();
         return Inertia::render('SchoolAdmin/Library/BookIssues/Create', [
             'school' => $school,
             'books' => $books,
-            'users' => $users,
+            'students' => $students,
+            'staff' => $staff,
+            'classes' => $classes,
         ]);
     }
 
@@ -38,6 +43,7 @@ class BookIssueController extends Controller
             'user_id' => 'required|exists:users,id',
             'issue_date' => 'required|date',
             'due_date' => 'required|date|after:issue_date',
+            'user_type' => 'required|in:student,staff',
         ]);
 
         $book = Book::find($request->book_id);

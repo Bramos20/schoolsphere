@@ -17,6 +17,7 @@ class Book extends Model
         'quantity',
         'available',
         'school_id',
+        'book_category_id',
     ];
 
     public function school()

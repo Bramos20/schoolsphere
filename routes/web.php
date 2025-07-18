@@ -26,6 +26,9 @@ use App\Http\Controllers\DefaultersReportController;
 use App\Http\Controllers\PaymentLedgerController;
 use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\StaffAttendanceController;
+use App\Http\Controllers\BookCategoryController;
+use App\Http\Controllers\BookController;
+use App\Http\Controllers\BookIssueController;
 
 /*
 |--------------------------------------------------------------------------
