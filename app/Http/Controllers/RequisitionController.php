@@ -23,6 +23,10 @@ class RequisitionController extends Controller
             });
         }
 
+        if ($user->hasRole('school_admin')) {
+            $query->where('status', 'approved_by_accountant');
+        }
+
         $requisitions = $query->get();
 
         return Inertia::render('SchoolAdmin/Library/Requisitions/Index', [
