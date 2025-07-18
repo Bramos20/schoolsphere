@@ -29,6 +29,7 @@ use App\Http\Controllers\StaffAttendanceController;
 use App\Http\Controllers\BookCategoryController;
 use App\Http\Controllers\BookController;
 use App\Http\Controllers\BookIssueController;
+use App\Http\Controllers\RequisitionController;
 
 /*
 |--------------------------------------------------------------------------
@@ -106,6 +107,7 @@ Route::middleware(['auth', 'role:school_admin'])->group(function () {
     Route::resource('/schools/{school}/books', BookController::class);
     Route::resource('/schools/{school}/book-categories', BookCategoryController::class);
     Route::resource('/schools/{school}/book-issues', BookIssueController::class);
+    
 
     Route::get('/schools/{school}/departments', [DepartmentController::class, 'index'])->name('departments.index');
     Route::post('/schools/{school}/departments', [DepartmentController::class, 'store'])->name('departments.store');
@@ -180,6 +182,7 @@ Route::middleware(['auth'])->group(function () {
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/schools/{school}/staff-attendance', [StaffAttendanceController::class, 'index'])->name('staff-attendance.index');
     Route::post('/schools/{school}/staff-attendance', [StaffAttendanceController::class, 'store'])->name('staff-attendance.store');
+    Route::resource('/schools/{school}/requisitions', RequisitionController::class);
 });
 
 /*
