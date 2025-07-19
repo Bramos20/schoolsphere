@@ -12,7 +12,8 @@ export default function Create({ school }) {
     setData('items', [...data.items, { item_name: '', quantity: 1, estimated_cost: '' }]);
   };
 
-  const removeItem = index => {
+  const removeItem = (e, index) => {
+    e.preventDefault();
     const updated = [...data.items];
     updated.splice(index, 1);
     setData('items', updated);
@@ -82,7 +83,7 @@ export default function Create({ school }) {
                 setData('items', updated);
               }}
             />
-            <button type="button" onClick={() => removeItem(index)} className="text-red-600">X</button>
+            <button type="button" onClick={(e) => removeItem(e, index)} className="text-red-600">X</button>
           </div>
         ))}
 
