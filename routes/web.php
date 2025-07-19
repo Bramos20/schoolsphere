@@ -182,8 +182,20 @@ Route::middleware(['auth'])->group(function () {
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/schools/{school}/staff-attendance', [StaffAttendanceController::class, 'index'])->name('staff-attendance.index');
     Route::post('/schools/{school}/staff-attendance', [StaffAttendanceController::class, 'store'])->name('staff-attendance.store');
-    Route::resource('/schools/{school}/requisitions', RequisitionController::class);
+
 });
+
+Route::middleware(['auth', 'verified'])->group(function () {
+    Route::prefix('schools/{school}')->group(function () {
+        Route::get('requisitions', [RequisitionController::class, 'index'])->name('requisitions.index');
+        Route::get('requisitions/create', [RequisitionController::class, 'create'])->name('requisitions.create');
+        Route::post('requisitions', [RequisitionController::class, 'store'])->name('requisitions.store');
+        Route::get('requisitions/{requisition}', [RequisitionController::class, 'show'])->name('requisitions.show');
+        Route::put('requisitions/{requisition}/approve', [RequisitionController::class, 'approve'])->name('requisitions.approve');
+        Route::put('requisitions/{requisition}/reject', [RequisitionController::class, 'reject'])->name('requisitions.reject');
+    });
+});
+
 
 /*
 |--------------------------------------------------------------------------

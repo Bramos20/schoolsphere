@@ -7,17 +7,11 @@ use Illuminate\Database\Eloquent\Model;
 
 class Requisition extends Model
 {
-    use HasFactory;
+    protected $fillable = ['school_id', 'user_id', 'title', 'description', 'status'];
 
-    protected $fillable = [
-        'school_id',
-        'user_id',
-        'status',
-    ];
-
-    public function school()
+    public function items()
     {
-        return $this->belongsTo(School::class);
+        return $this->hasMany(RequisitionItem::class);
     }
 
     public function user()
@@ -25,8 +19,8 @@ class Requisition extends Model
         return $this->belongsTo(User::class);
     }
 
-    public function items()
+    public function school()
     {
-        return $this->hasMany(RequisitionItem::class);
+        return $this->belongsTo(School::class);
     }
 }

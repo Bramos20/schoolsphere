@@ -14,9 +14,9 @@ return new class extends Migration
         Schema::create('requisition_items', function (Blueprint $table) {
             $table->id();
             $table->foreignId('requisition_id')->constrained()->onDelete('cascade');
-            $table->string('name');
+            $table->string('item_name');
             $table->integer('quantity');
-            $table->decimal('price', 8, 2);
+            $table->decimal('estimated_cost', 10, 2)->nullable();
             $table->timestamps();
         });
     }

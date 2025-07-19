@@ -2,42 +2,30 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Requisition;
 use App\Models\School;
+use App\Models\Requisition;
 use Illuminate\Http\Request;
-use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
+use Inertia\Inertia;
 
 class RequisitionController extends Controller
 {
     public function index(School $school)
     {
-        $user = Auth::user();
-        $query = Requisition::where('school_id', $school->id)->with('user', 'items');
+        $requisitions = Requisition::with(['user'])
+            ->where('school_id', $school->id)
+            ->latest()
+            ->get();
 
-        if ($user->hasRole('librarian')) {
-            $query->where('user_id', $user->id);
-        } elseif ($user->hasRole('hod')) {
-            $query->whereHas('user.staff', function ($q) use ($user) {
-                $q->where('department_id', $user->staff->department_id);
-            });
-        }
-
-        if ($user->hasRole('school_admin')) {
-            $query->where('status', 'approved_by_accountant');
-        }
-
-        $requisitions = $query->get();
-
-        return Inertia::render('SchoolAdmin/Library/Requisitions/Index', [
-            'school' => $school,
+        return Inertia::render('SchoolAdmin/Requisitions/Index', [
             'requisitions' => $requisitions,
+            'school' => $school,
         ]);
     }
 
     public function create(School $school)
     {
-        return Inertia::render('SchoolAdmin/Library/Requisitions/Create', [
+        return Inertia::render('SchoolAdmin/Requisitions/Create', [
             'school' => $school,
         ]);
     }
@@ -45,55 +33,55 @@ class RequisitionController extends Controller
     public function store(Request $request, School $school)
     {
         $request->validate([
+            'title' => 'required|string|max:255',
+            'description' => 'nullable|string',
             'items' => 'required|array|min:1',
-            'items.*.name' => 'required|string|max:255',
+            'items.*.item_name' => 'required|string|max:255',
             'items.*.quantity' => 'required|integer|min:1',
-            'items.*.price' => 'required|numeric|min:0',
-        ]);
-
-        $requisition = new Requisition();
-        $requisition->school_id = $school->id;
-        $requisition->user_id = Auth::id();
-        $requisition->save();
-
-        foreach ($request->items as $item) {
-            $requisition->items()->create($item);
-        }
-
-        return redirect()->route('requisitions.index', $school)->with('success', 'Requisition created successfully.');
-    }
-
-    public function show(School $school, Requisition $requisition)
-    {
-        $requisition->load('user', 'items');
-        return Inertia::render('SchoolAdmin/Library/Requisitions/Show', [
-            'school' => $school,
-            'requisition' => $requisition,
-        ]);
-    }
-
-    public function update(Request $request, School $school, Requisition $requisition)
-    {
-        $request->validate([
-            'status' => 'required|in:approved_by_accountant,approved_by_admin,rejected',
+            'items.*.estimated_cost' => 'nullable|numeric|min:0',
         ]);
 
         $user = Auth::user();
 
-        if ($request->status === 'approved_by_accountant' && !$user->hasRole('accountant')) {
-            abort(403);
+        $requisition = $school->requisitions()->create([
+            'user_id' => $user->id,
+            'title' => $request->title,
+            'description' => $request->description,
+            'status' => 'pending_accountant_approval',
+        ]);
+
+        foreach ($request->items as $item) {
+            $requisition->items()->create([
+                'item_name' => $item['item_name'],
+                'quantity' => $item['quantity'],
+                'estimated_cost' => $item['estimated_cost'] ?? null,
+            ]);
         }
 
-        if ($request->status === 'approved_by_admin' && !$user->hasRole('school_admin')) {
-            abort(403);
-        }
+        return redirect()->route('requisitions.index', $school)->with('success', 'Requisition submitted successfully.');
+    }
 
-        if ($request->status === 'rejected' && !$user->hasAnyRole(['accountant', 'school_admin', 'hod'])) {
-            abort(403);
-        }
+    public function show(School $school, Requisition $requisition)
+    {
+        $requisition->load(['items', 'user']);
 
-        $requisition->update($request->only('status'));
+        return Inertia::render('SchoolAdmin/Requisitions/Show', [
+            'requisition' => $requisition,
+            'school' => $school,
+        ]);
+    }
 
-        return redirect()->route('requisitions.index', $school)->with('success', 'Requisition updated successfully.');
+    public function approve(School $school, Requisition $requisition)
+    {
+        $requisition->update(['status' => 'approved_by_admin']);
+
+        return back()->with('success', 'Requisition approved.');
+    }
+
+    public function reject(School $school, Requisition $requisition)
+    {
+        $requisition->update(['status' => 'rejected']);
+
+        return back()->with('success', 'Requisition rejected.');
     }
 }

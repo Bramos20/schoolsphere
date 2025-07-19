@@ -7,14 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class RequisitionItem extends Model
 {
-    use HasFactory;
-
-    protected $fillable = [
-        'requisition_id',
-        'name',
-        'quantity',
-        'price',
-    ];
+    protected $fillable = ['requisition_id', 'item_name', 'quantity', 'estimated_cost'];
 
     public function requisition()
     {

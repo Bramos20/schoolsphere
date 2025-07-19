@@ -15,7 +15,9 @@ return new class extends Migration
             $table->id();
             $table->foreignId('school_id')->constrained()->onDelete('cascade');
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
-            $table->string('status')->default('pending');
+            $table->string('title');
+            $table->text('description')->nullable();
+            $table->enum('status', ['pending_accountant_approval', 'pending_admin_approval', 'approved_by_admin', 'rejected'])->default('pending_accountant_approval');
             $table->timestamps();
         });
     }
