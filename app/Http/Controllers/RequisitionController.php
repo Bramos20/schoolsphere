@@ -71,14 +71,14 @@ class RequisitionController extends Controller
         ]);
     }
 
-    public function approve(School $school, Requisition $requisition)
+    public function approve(Request $request, School $school, Requisition $requisition)
     {
         $requisition->update(['status' => 'approved_by_admin']);
 
         return back()->with('success', 'Requisition approved.');
     }
 
-    public function reject(School $school, Requisition $requisition)
+    public function reject(Request $request, School $school, Requisition $requisition)
     {
         $requisition->update(['status' => 'rejected']);
 

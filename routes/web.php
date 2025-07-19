@@ -191,8 +191,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('requisitions/create', [RequisitionController::class, 'create'])->name('requisitions.create');
         Route::post('requisitions', [RequisitionController::class, 'store'])->name('requisitions.store');
         Route::get('requisitions/{requisition}', [RequisitionController::class, 'show'])->name('requisitions.show');
-        Route::put('requisitions/{requisition}/approve', [RequisitionController::class, 'approve'])->name('requisitions.approve');
-        Route::put('requisitions/{requisition}/reject', [RequisitionController::class, 'reject'])->name('requisitions.reject');
+        Route::post('requisitions/{requisition}/approve', [RequisitionController::class, 'approve'])->name('requisitions.approve');
+        Route::post('requisitions/{requisition}/reject', [RequisitionController::class, 'reject'])->name('requisitions.reject');
     });
 });
 

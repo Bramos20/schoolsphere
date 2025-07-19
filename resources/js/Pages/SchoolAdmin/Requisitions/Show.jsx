@@ -26,7 +26,7 @@ export default function Show({ school, requisition }) {
           <ul className="list-disc pl-6">
             {requisition.items.map((item) => (
               <li key={item.id}>
-                {item.name} - Qty: {item.quantity}
+                {item.item_name} - Qty: {item.quantity}
               </li>
             ))}
           </ul>
