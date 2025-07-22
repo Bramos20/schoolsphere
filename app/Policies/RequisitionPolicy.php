@@ -47,7 +47,7 @@ class RequisitionPolicy
     public function create(User $user, School $school)
     {
         // HODs, Librarians, and admins can create requisitions
-        return $user->hasRole(['hod', 'librarian', 'admin']) && 
+        return $user->hasRole(['Head of Department', 'librarian', 'admin']) &&
                $user->school_id === $school->id;
     }
 
