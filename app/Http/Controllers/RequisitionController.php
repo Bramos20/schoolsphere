@@ -134,8 +134,8 @@ class RequisitionController extends Controller
         if ($currentStatus === 'pending_accountant_approval' && $user->hasRole('accountant')) {
             $newStatus = 'pending_admin_approval';
             $approvalType = 'accountant_approval';
-        } elseif ($currentStatus === 'pending_admin_approval' && $user->hasRole('school_admin')) {
-            $newStatus = 'approved';
+        } elseif ($currentStatus === 'pending_admin_approval' && $user->hasRole('admin')) {
+            $newStatus = 'approved_by_admin';
             $approvalType = 'admin_approval';
         } else {
             return back()->withErrors(['error' => 'You are not authorized to approve this requisition at this stage.']);
