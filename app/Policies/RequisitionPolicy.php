@@ -17,7 +17,7 @@ class RequisitionPolicy
     public function viewAny(User $user, School $school)
     {
         // Check if user belongs to this school
-        return $user->schools()->where('school_id', $school->id)->exists() ||
+        return $user->school_id === $school->id ||
                $user->hasRole(['super_admin', 'company_admin']);
     }
 
@@ -33,7 +33,7 @@ class RequisitionPolicy
 
         // Accountants and admins can view all requisitions in their school
         if ($user->hasRole(['accountant', 'admin']) && 
-            $user->schools()->where('school_id', $school->id)->exists()) {
+            $user->school_id === $school->id) {
             return true;
         }
 
@@ -48,7 +48,7 @@ class RequisitionPolicy
     {
         // HODs, Librarians, and admins can create requisitions
         return $user->hasRole(['hod', 'librarian', 'admin']) && 
-               $user->schools()->where('school_id', $school->id)->exists();
+               $user->school_id === $school->id;
     }
 
     /**
@@ -67,7 +67,7 @@ class RequisitionPolicy
         }
 
         // Must belong to the school
-        return $user->schools()->where('school_id', $school->id)->exists();
+        return $user->school_id === $school->id;
     }
 
     /**
@@ -86,7 +86,7 @@ class RequisitionPolicy
         }
 
         // Must belong to the school
-        return $user->schools()->where('school_id', $school->id)->exists();
+        return $user->school_id === $school->id;
     }
 
     /**
@@ -95,7 +95,7 @@ class RequisitionPolicy
     public function approve(User $user, Requisition $requisition, School $school)
     {
         // Must belong to the school
-        if (!$user->schools()->where('school_id', $school->id)->exists() && 
+        if ($user->school_id !== $school->id &&
             !$user->hasRole(['super_admin', 'company_admin'])) {
             return false;
         }
@@ -119,7 +119,7 @@ class RequisitionPolicy
     public function reject(User $user, Requisition $requisition, School $school)
     {
         // Must belong to the school
-        if (!$user->schools()->where('school_id', $school->id)->exists() && 
+        if ($user->school_id !== $school->id &&
             !$user->hasRole(['super_admin', 'company_admin'])) {
             return false;
         }
@@ -144,7 +144,7 @@ class RequisitionPolicy
     {
         // Accountants and admins can export requisitions
         return $user->hasRole(['accountant', 'admin', 'super_admin', 'company_admin']) && 
-               ($user->schools()->where('school_id', $school->id)->exists() || 
+               ($user->school_id === $school->id ||
                 $user->hasRole(['super_admin', 'company_admin']));
     }
 
@@ -155,7 +155,7 @@ class RequisitionPolicy
     {
         // Accountants and admins can view reports
         return $user->hasRole(['accountant', 'admin', 'super_admin', 'company_admin']) && 
-               ($user->schools()->where('school_id', $school->id)->exists() || 
+               ($user->school_id === $school->id ||
                 $user->hasRole(['super_admin', 'company_admin']));
     }
 
@@ -166,7 +166,7 @@ class RequisitionPolicy
     {
         // Only admins and super admins can bulk approve
         return $user->hasRole(['admin', 'super_admin']) && 
-               ($user->schools()->where('school_id', $school->id)->exists() || 
+               ($user->school_id === $school->id ||
                 $user->hasRole('super_admin'));
     }
 
@@ -182,7 +182,7 @@ class RequisitionPolicy
 
         // Accountants and admins can view approval history
         return $user->hasRole(['accountant', 'admin', 'super_admin', 'company_admin']) && 
-               ($user->schools()->where('school_id', $school->id)->exists() || 
+               ($user->school_id === $school->id ||
                 $user->hasRole(['super_admin', 'company_admin']));
     }
 }

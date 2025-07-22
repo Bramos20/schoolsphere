@@ -99,8 +99,8 @@ class User extends Authenticatable
         return $this->roles->pluck('name');
     }
 
-    public function schools()
+    public function school()
     {
-        return $this->belongsToMany(School::class);
+        return $this->belongsTo(School::class);
     }
 }
