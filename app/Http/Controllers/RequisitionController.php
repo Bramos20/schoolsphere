@@ -9,9 +9,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 
 class RequisitionController extends Controller
 {
+    use AuthorizesRequests;
     public function index(School $school)
     {
         // Check if user has access to this school
