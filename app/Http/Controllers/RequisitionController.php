@@ -110,7 +110,7 @@ class RequisitionController extends Controller
         // Check approval permissions based on current status and user role
         if ($requisition->status === 'pending_accountant_approval' && $user->hasRole('accountant')) {
             $canApprove = $canReject = true;
-        } elseif ($requisition->status === 'pending_admin_approval' && $user->hasRole('admin')) {
+        } elseif ($requisition->status === 'pending_admin_approval' && $user->hasRole('school_admin')) {
             $canApprove = $canReject = true;
         }
 
@@ -134,7 +134,7 @@ class RequisitionController extends Controller
         if ($currentStatus === 'pending_accountant_approval' && $user->hasRole('accountant')) {
             $newStatus = 'pending_admin_approval';
             $approvalType = 'accountant_approval';
-        } elseif ($currentStatus === 'pending_admin_approval' && $user->hasRole('admin')) {
+        } elseif ($currentStatus === 'pending_admin_approval' && $user->hasRole('school_admin')) {
             $newStatus = 'approved';
             $approvalType = 'admin_approval';
         } else {
@@ -178,7 +178,7 @@ class RequisitionController extends Controller
         // Determine rejection type based on current status
         if ($requisition->status === 'pending_accountant_approval' && $user->hasRole('accountant')) {
             $approvalType = 'accountant_approval';
-        } elseif ($requisition->status === 'pending_admin_approval' && $user->hasRole('admin')) {
+        } elseif ($requisition->status === 'pending_admin_approval' && $user->hasRole('school_admin')) {
             $approvalType = 'admin_approval';
         } else {
             return back()->withErrors(['error' => 'You are not authorized to reject this requisition at this stage.']);

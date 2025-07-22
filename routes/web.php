@@ -185,7 +185,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
 });
 
-Route::middleware(['auth', 'verified'])->group(function () {
+Route::middleware(['auth'])->group(function () {
     Route::prefix('schools/{school}')->group(function () {
         Route::get('requisitions', [RequisitionController::class, 'index'])->name('requisitions.index');
         Route::get('requisitions/create', [RequisitionController::class, 'create'])->name('requisitions.create');

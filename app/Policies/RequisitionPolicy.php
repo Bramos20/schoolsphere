@@ -32,7 +32,7 @@ class RequisitionPolicy
         }
 
         // Accountants and admins can view all requisitions in their school
-        if ($user->hasRole(['accountant', 'admin']) && 
+        if ($user->hasRole(['accountant', 'school_admin']) && 
             $user->school_id === $school->id) {
             return true;
         }
@@ -47,7 +47,7 @@ class RequisitionPolicy
     public function create(User $user, School $school)
     {
         // HODs, Librarians, and admins can create requisitions
-        return $user->hasRole(['hod', 'librarian', 'admin']) &&
+        return $user->hasRole(['hod', 'librarian', 'school_admin']) &&
                $user->school_id === $school->id;
     }
 
@@ -106,7 +106,7 @@ class RequisitionPolicy
         }
 
         // Admins can approve if pending admin approval
-        if ($requisition->status === 'pending_admin_approval' && $user->hasRole(['admin', 'super_admin'])) {
+        if ($requisition->status === 'pending_admin_approval' && $user->hasRole(['school_admin', 'super_admin'])) {
             return true;
         }
 
@@ -130,7 +130,7 @@ class RequisitionPolicy
         }
 
         // Admins can reject if pending admin approval
-        if ($requisition->status === 'pending_admin_approval' && $user->hasRole(['admin', 'super_admin'])) {
+        if ($requisition->status === 'pending_admin_approval' && $user->hasRole(['school_admin', 'super_admin'])) {
             return true;
         }
 
@@ -143,7 +143,7 @@ class RequisitionPolicy
     public function export(User $user, School $school)
     {
         // Accountants and admins can export requisitions
-        return $user->hasRole(['accountant', 'admin', 'super_admin', 'company_admin']) && 
+        return $user->hasRole(['accountant', 'school_admin', 'super_admin', 'company_admin']) && 
                ($user->school_id === $school->id ||
                 $user->hasRole(['super_admin', 'company_admin']));
     }
@@ -154,7 +154,7 @@ class RequisitionPolicy
     public function viewReports(User $user, School $school)
     {
         // Accountants and admins can view reports
-        return $user->hasRole(['accountant', 'admin', 'super_admin', 'company_admin']) && 
+        return $user->hasRole(['accountant', 'school_admin', 'super_admin', 'company_admin']) && 
                ($user->school_id === $school->id ||
                 $user->hasRole(['super_admin', 'company_admin']));
     }
@@ -165,7 +165,7 @@ class RequisitionPolicy
     public function bulkApprove(User $user, School $school)
     {
         // Only admins and super admins can bulk approve
-        return $user->hasRole(['admin', 'super_admin']) && 
+        return $user->hasRole(['school_admin', 'super_admin']) && 
                ($user->school_id === $school->id ||
                 $user->hasRole('super_admin'));
     }
@@ -181,7 +181,7 @@ class RequisitionPolicy
         }
 
         // Accountants and admins can view approval history
-        return $user->hasRole(['accountant', 'admin', 'super_admin', 'company_admin']) && 
+        return $user->hasRole(['accountant', 'school_admin', 'super_admin', 'company_admin']) && 
                ($user->school_id === $school->id ||
                 $user->hasRole(['super_admin', 'company_admin']));
     }
