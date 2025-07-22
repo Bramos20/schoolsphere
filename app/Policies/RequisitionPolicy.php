@@ -55,8 +55,10 @@ class RequisitionPolicy
         ]);
 
         // HODs, Librarians, and admins can create requisitions
-        return $user->hasRole(['hod', 'librarian', 'admin']) &&
-            $user->school_id === $school->id;
+       feature/requisition-system-updates
+        return $user->hasRole(['Head of Department', 'librarian', 'admin']) &&
+               $user->school_id === $school->id;
+
     }
 
     /**
