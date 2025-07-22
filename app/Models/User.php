@@ -59,9 +59,21 @@ class User extends Authenticatable
         return $this->belongsToMany(Role::class);
     }
 
-    public function hasRole($slug)
+    public function hasRole($role)
     {
-        return $this->roles->contains('slug', $slug);
+        if (is_string($role)) {
+            return $this->roles->contains('slug', $role);
+        }
+
+        if (is_array($role)) {
+            foreach ($role as $r) {
+                if ($this->hasRole($r)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     public function taughtSubjects()
