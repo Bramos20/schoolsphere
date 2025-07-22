@@ -83,5 +83,13 @@ class User extends Authenticatable
         return $this->hasOne(Staff::class);
     }
 
+    public function requisitions()
+    {
+        return $this->hasMany(Requisition::class);
+    }
 
+    public function approvals()
+    {
+        return $this->hasMany(RequisitionApproval::class);
+    }
 }
