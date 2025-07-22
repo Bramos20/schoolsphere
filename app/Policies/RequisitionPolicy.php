@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Models\School;
 use App\Models\Requisition;
 use Illuminate\Auth\Access\HandlesAuthorization;
+use Illuminate\Support\Facades\Log;
 
 class RequisitionPolicy
 {
@@ -46,9 +47,18 @@ class RequisitionPolicy
      */
     public function create(User $user, School $school)
     {
+        Log::info('Checking if user can create requisition', [
+            'user_id' => $user->id,
+            'user_roles' => $user->getRoleNames(),
+            'user_school_id' => $user->school_id,
+            'school_id' => $school->id,
+        ]);
+
         // HODs, Librarians, and admins can create requisitions
+       feature/requisition-system-updates
         return $user->hasRole(['Head of Department', 'librarian', 'admin']) &&
                $user->school_id === $school->id;
+
     }
 
     /**
