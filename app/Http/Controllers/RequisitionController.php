@@ -44,8 +44,11 @@ class RequisitionController extends Controller
     {
         $this->authorize('create', [Requisition::class, $school]);
 
+        $departments = $school->departments()->get();
+
         return Inertia::render('SchoolAdmin/Requisitions/Create', [
             'school' => $school,
+            'departments' => $departments,
         ]);
     }
 
