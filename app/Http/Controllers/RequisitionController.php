@@ -158,8 +158,8 @@ class RequisitionController extends Controller
             $approvalType . '_by' => $user->id,
         ]);
 
-        $message = $newStatus === 'approved' 
-            ? 'Requisition fully approved and ready for procurement.' 
+        $message = $newStatus === 'approved_by_admin'
+            ? 'Requisition fully approved and ready for procurement.'
             : 'Requisition approved and forwarded to admin for final approval.';
 
         return back()->with('success', $message);
@@ -241,12 +241,17 @@ class RequisitionController extends Controller
         ]);
 
         // Update requisition
-        $requisition->update([
+        $updateData = [
             'title' => $request->title,
             'description' => $request->description,
             'priority' => $request->priority ?? $requisition->priority,
-            'status' => 'pending_accountant_approval', // Reset to initial status
-        ]);
+        ];
+
+        if ($requisition->status === 'rejected') {
+            $updateData['status'] = 'pending_accountant_approval';
+        }
+
+        $requisition->update($updateData);
 
         // Delete existing items and create new ones
         $requisition->items()->delete();
