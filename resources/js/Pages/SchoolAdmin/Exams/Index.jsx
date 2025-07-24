@@ -141,12 +141,12 @@ export default function ExamsIndex({ school, exams, examSeries, categories }) {
                             />
                         </div>
                         
-                        <Select value={selectedSeries} onValueChange={setSelectedSeries}>
+                        <Select value={selectedSeries} onValueChange={value => setSelectedSeries(value === 'all' ? '' : value)}>
                             <SelectTrigger className="w-[200px]">
                                 <SelectValue placeholder="All Series" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="">All Series</SelectItem>
+                                <SelectItem value="all">All Series</SelectItem>
                                 {examSeries.map(series => (
                                     <SelectItem key={series.id} value={series.id.toString()}>
                                         {series.name}
@@ -155,12 +155,12 @@ export default function ExamsIndex({ school, exams, examSeries, categories }) {
                             </SelectContent>
                         </Select>
                         
-                        <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                        <Select value={selectedCategory} onValueChange={value => setSelectedCategory(value === 'all' ? '' : value)}>
                             <SelectTrigger className="w-[200px]">
                                 <SelectValue placeholder="All Categories" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="">All Categories</SelectItem>
+                                <SelectItem value="all">All Categories</SelectItem>
                                 {categories.map(category => (
                                     <SelectItem key={category.id} value={category.id.toString()}>
                                         {category.name}
