@@ -194,6 +194,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('requisitions/{requisition}/approve', [RequisitionController::class, 'approve'])->name('requisitions.approve');
         Route::post('requisitions/{requisition}/reject', [RequisitionController::class, 'reject'])->name('requisitions.reject');
     });
+
+    Route::prefix('schools/{school}')->group(function () {
+        Route::resource('exams', ExamController::class);
+        Route::resource('exam_results', ExamResultController::class);
+        Route::resource('timetables', TimetableController::class);
+    });
 });
 
 
