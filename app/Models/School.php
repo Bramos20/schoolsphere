@@ -30,4 +30,14 @@ class School extends Model
     {
         return $this->hasMany(Requisition::class);
     }
+
+    public function exams()
+    {
+        return $this->hasMany(Exam::class);
+    }
+
+    public function timetables()
+    {
+        return $this->hasMany(Timetable::class);
+    }
 }
