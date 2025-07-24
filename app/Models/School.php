@@ -40,4 +40,9 @@ class School extends Model
     {
         return $this->hasMany(Timetable::class);
     }
+
+    public function subjects()
+    {
+        return $this->hasMany(Subject::class);
+    }
 }
