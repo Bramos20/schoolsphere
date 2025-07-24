@@ -202,16 +202,20 @@ export default function ExamsIndex({ school, exams, examSeries, categories }) {
                                             <div>
                                                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Series & Category</p>
                                                 <div className="space-y-1 mt-1">
-                                                    <Badge variant="outline" className="mr-1">{exam.exam_series.name}</Badge>
-                                                    <Badge 
-                                                        variant="outline"
-                                                        style={{ 
-                                                            backgroundColor: exam.exam_category.color + '20',
-                                                            borderColor: exam.exam_category.color
-                                                        }}
-                                                    >
-                                                        {exam.exam_category.name}
-                                                    </Badge>
+                                                    <Badge variant="outline" className="mr-1">{exam.exam_series ? exam.exam_series.name : 'N/A'}</Badge>
+                                                    {exam.exam_category ? (
+                                                        <Badge
+                                                            variant="outline"
+                                                            style={{
+                                                                backgroundColor: exam.exam_category.color + '20',
+                                                                borderColor: exam.exam_category.color
+                                                            }}
+                                                        >
+                                                            {exam.exam_category.name}
+                                                        </Badge>
+                                                    ) : (
+                                                        <Badge variant="outline">N/A</Badge>
+                                                    )}
                                                 </div>
                                             </div>
 
