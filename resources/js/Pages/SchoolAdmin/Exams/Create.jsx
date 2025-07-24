@@ -1,16 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { Head, useForm } from '@inertiajs/react';
-import { Calendar, Clock, BookOpen, Users, Settings, Check } from 'lucide-react';
+import { Head, Link, useForm } from '@inertiajs/react';
+import { ArrowLeft, Save, Clock, Calendar, BookOpen, Users, Settings } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
-export default function CreateExam({ school, classes, subjects, examSeries, categories, gradingSystems }) {
-    const [selectedClass, setSelectedClass] = useState(null);
+export default function ExamsCreate({ school, classes, subjects, examSeries, categories, gradingSystems }) {
+    const [selectedClass, setSelectedClass] = useState('');
     const [availableStreams, setAvailableStreams] = useState([]);
-    const [showAdvanced, setShowAdvanced] = useState(false);
+    const [showPracticalFields, setShowPracticalFields] = useState(false);
 
     const { data, setData, post, processing, errors, reset } = useForm({
-        exam_series_id: examSeries.find(s => s.is_active)?.id || '',
-        exam_category_id: categories[0]?.id || '',
-        grading_system_id: gradingSystems.find(g => g.is_default)?.id || gradingSystems[0]?.id || '',
+        exam_series_id: '',
+        exam_category_id: '',
+        grading_system_id: '',
         class_id: '',
         stream_id: '',
         subject_id: '',
@@ -19,475 +27,484 @@ export default function CreateExam({ school, classes, subjects, examSeries, cate
         date: '',
         start_time: '',
         end_time: '',
-        duration_minutes: 120,
-        total_marks: 100,
-        pass_mark: 50,
+        duration_minutes: '',
+        total_marks: '',
+        pass_mark: '',
         has_practical: false,
-        practical_percentage: 30,
-        theory_percentage: 70,
+        practical_percentage: '',
+        theory_percentage: '',
         instructions: ''
     });
 
+    // Update available streams when class changes
     useEffect(() => {
-        if (data.class_id) {
-            const classData = classes.find(c => c.id === parseInt(data.class_id));
-            setSelectedClass(classData);
+        if (selectedClass) {
+            const classData = classes.find(c => c.id.toString() === selectedClass);
             setAvailableStreams(classData?.streams || []);
-            setData('stream_id', ''); // Reset stream selection
+            setData(prev => ({ ...prev, class_id: selectedClass, stream_id: '' }));
         }
-    }, [data.class_id]);
+    }, [selectedClass]);
 
+    // Calculate duration when times change
     useEffect(() => {
-        if (data.has_practical && (data.practical_percentage + data.theory_percentage !== 100)) {
-            setData('theory_percentage', 100 - data.practical_percentage);
+        if (data.start_time && data.end_time) {
+            const start = new Date(`2000-01-01T${data.start_time}`);
+            const end = new Date(`2000-01-01T${data.end_time}`);
+            const diffMinutes = (end - start) / (1000 * 60);
+            if (diffMinutes > 0) {
+                setData('duration_minutes', diffMinutes.toString());
+            }
         }
-    }, [data.practical_percentage, data.has_practical]);
+    }, [data.start_time, data.end_time]);
+
+    // Auto-adjust percentages for practical exams
+    useEffect(() => {
+        if (showPracticalFields) {
+            if (data.practical_percentage && !data.theory_percentage) {
+                setData('theory_percentage', (100 - parseFloat(data.practical_percentage)).toString());
+            }
+        } else {
+            setData(prev => ({
+                ...prev,
+                practical_percentage: '',
+                theory_percentage: ''
+            }));
+        }
+    }, [showPracticalFields, data.practical_percentage]);
 
     const handleSubmit = (e) => {
         e.preventDefault();
         post(route('exams.store', school.id));
     };
 
-    const generateExamName = () => {
-        const category = categories.find(c => c.id === parseInt(data.exam_category_id));
-        const subject = subjects.find(s => s.id === parseInt(data.subject_id));
-        const className = classes.find(c => c.id === parseInt(data.class_id));
-        const stream = availableStreams.find(s => s.id === parseInt(data.stream_id));
-        
-        if (category && subject && className) {
-            let name = `${category.name} - ${subject.name} - ${className.name}`;
-            if (stream) name += ` ${stream.name}`;
-            setData('name', name);
+    const validatePercentages = () => {
+        if (showPracticalFields) {
+            const practical = parseFloat(data.practical_percentage) || 0;
+            const theory = parseFloat(data.theory_percentage) || 0;
+            return practical + theory === 100;
         }
+        return true;
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+        <div className="space-y-6">
             <Head title="Create Exam" />
-            
-            <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                {/* Header */}
-                <div className="mb-8">
-                    <h1 className="text-3xl font-bold text-gray-900">Create New Exam</h1>
-                    <p className="text-gray-600 mt-2">Set up a new examination for {school.name}</p>
+
+            {/* Header */}
+            <div className="flex items-center gap-4">
+                <Link href={route('exams.index', school.id)}>
+                    <Button variant="outline" size="sm">
+                        <ArrowLeft className="mr-2 h-4 w-4" />
+                        Back to Exams
+                    </Button>
+                </Link>
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight">Create New Exam</h1>
+                    <p className="text-muted-foreground">
+                        Set up a new examination for your school
+                    </p>
                 </div>
+            </div>
 
-                {/* Progress Steps */}
-                <div className="mb-8">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-4">
-                            <div className="flex items-center">
-                                <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-medium">
-                                    1
-                                </div>
-                                <span className="ml-2 text-sm font-medium text-gray-900">Basic Info</span>
-                            </div>
-                            <div className="w-16 h-1 bg-gray-200 rounded"></div>
-                            <div className="flex items-center">
-                                <div className="w-8 h-8 bg-gray-200 text-gray-600 rounded-full flex items-center justify-center text-sm font-medium">
-                                    2
-                                </div>
-                                <span className="ml-2 text-sm font-medium text-gray-600">Schedule</span>
-                            </div>
-                            <div className="w-16 h-1 bg-gray-200 rounded"></div>
-                            <div className="flex items-center">
-                                <div className="w-8 h-8 bg-gray-200 text-gray-600 rounded-full flex items-center justify-center text-sm font-medium">
-                                    3
-                                </div>
-                                <span className="ml-2 text-sm font-medium text-gray-600">Settings</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <form onSubmit={handleSubmit} className="space-y-8">
-                    {/* Basic Information Card */}
-                    <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
-                        <div className="flex items-center mb-6">
-                            <BookOpen className="w-6 h-6 text-blue-600 mr-3" />
-                            <h2 className="text-xl font-semibold text-gray-900">Basic Information</h2>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {/* Exam Series */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Exam Series <span className="text-red-500">*</span>
-                                </label>
-                                <select
-                                    value={data.exam_series_id}
-                                    onChange={(e) => setData('exam_series_id', e.target.value)}
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                                >
-                                    <option value="">Select exam series...</option>
-                                    {examSeries.map(series => (
-                                        <option key={series.id} value={series.id}>
-                                            {series.name} - {series.academic_year} Term {series.term}
-                                        </option>
-                                    ))}
-                                </select>
-                                {errors.exam_series_id && <p className="text-red-500 text-sm mt-1">{errors.exam_series_id}</p>}
-                            </div>
-
-                            {/* Exam Category */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Exam Category <span className="text-red-500">*</span>
-                                </label>
-                                <select
-                                    value={data.exam_category_id}
-                                    onChange={(e) => setData('exam_category_id', e.target.value)}
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                                >
-                                    {categories.map(category => (
-                                        <option key={category.id} value={category.id}>
-                                            {category.name} ({category.weight_percentage}% weight)
-                                        </option>
-                                    ))}
-                                </select>
-                                {errors.exam_category_id && <p className="text-red-500 text-sm mt-1">{errors.exam_category_id}</p>}
-                            </div>
-
-                            {/* Class */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Class <span className="text-red-500">*</span>
-                                </label>
-                                <select
-                                    value={data.class_id}
-                                    onChange={(e) => setData('class_id', e.target.value)}
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                                >
-                                    <option value="">Select class...</option>
-                                    {classes.map(cls => (
-                                        <option key={cls.id} value={cls.id}>
-                                            {cls.name}
-                                        </option>
-                                    ))}
-                                </select>
-                                {errors.class_id && <p className="text-red-500 text-sm mt-1">{errors.class_id}</p>}
-                            </div>
-
-                            {/* Stream */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Stream (Optional)
-                                </label>
-                                <select
-                                    value={data.stream_id}
-                                    onChange={(e) => setData('stream_id', e.target.value)}
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                                    disabled={!data.class_id}
-                                >
-                                    <option value="">All streams in class</option>
-                                    {availableStreams.map(stream => (
-                                        <option key={stream.id} value={stream.id}>
-                                            {stream.name}
-                                        </option>
-                                    ))}
-                                </select>
-                                {!data.class_id && (
-                                    <p className="text-gray-500 text-sm mt-1">Select a class first to choose streams</p>
-                                )}
-                            </div>
-
-                            {/* Subject */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Subject <span className="text-red-500">*</span>
-                                </label>
-                                <select
-                                    value={data.subject_id}
-                                    onChange={(e) => setData('subject_id', e.target.value)}
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                                >
-                                    <option value="">Select subject...</option>
-                                    {subjects.map(subject => (
-                                        <option key={subject.id} value={subject.id}>
-                                            {subject.name}
-                                        </option>
-                                    ))}
-                                </select>
-                                {errors.subject_id && <p className="text-red-500 text-sm mt-1">{errors.subject_id}</p>}
-                            </div>
-
-                            {/* Grading System */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Grading System <span className="text-red-500">*</span>
-                                </label>
-                                <select
-                                    value={data.grading_system_id}
-                                    onChange={(e) => setData('grading_system_id', e.target.value)}
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                                >
-                                    {gradingSystems.map(system => (
-                                        <option key={system.id} value={system.id}>
-                                            {system.name} {system.is_default && '(Default)'}
-                                        </option>
-                                    ))}
-                                </select>
-                                {errors.grading_system_id && <p className="text-red-500 text-sm mt-1">{errors.grading_system_id}</p>}
-                            </div>
-                        </div>
-
-                        {/* Exam Name */}
-                        <div className="mt-6">
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Exam Name <span className="text-red-500">*</span>
-                            </label>
-                            <div className="flex">
-                                <input
-                                    type="text"
-                                    value={data.name}
-                                    onChange={(e) => setData('name', e.target.value)}
-                                    className="flex-1 px-4 py-3 border border-gray-300 rounded-l-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                                    placeholder="e.g., CAT 1 - Mathematics - Form 1A"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={generateExamName}
-                                    className="px-4 py-3 bg-gray-100 text-gray-700 border border-l-0 border-gray-300 rounded-r-lg hover:bg-gray-200 transition-colors"
-                                    disabled={!data.exam_category_id || !data.subject_id || !data.class_id}
-                                >
-                                    Auto-generate
-                                </button>
-                            </div>
-                            {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name}</p>}
-                        </div>
-
-                        {/* Description */}
-                        <div className="mt-6">
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Description (Optional)
-                            </label>
-                            <textarea
-                                value={data.description}
-                                onChange={(e) => setData('description', e.target.value)}
-                                rows="3"
-                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                                placeholder="Additional details about this exam..."
-                            />
-                        </div>
-                    </div>
-
-                    {/* Schedule Card */}
-                    <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
-                        <div className="flex items-center mb-6">
-                            <Calendar className="w-6 h-6 text-green-600 mr-3" />
-                            <h2 className="text-xl font-semibold text-gray-900">Schedule & Timing</h2>
-                        </div>Icon className="w-6 h-6 text-green-600 mr-3" />
-                            <h2 className="text-xl font-semibold text-gray-900">Schedule & Timing</h2>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            {/* Date */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Exam Date <span className="text-red-500">*</span>
-                                </label>
-                                <input
-                                    type="date"
-                                    value={data.date}
-                                    onChange={(e) => setData('date', e.target.value)}
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                                />
-                                {errors.date && <p className="text-red-500 text-sm mt-1">{errors.date}</p>}
-                            </div>
-
-                            {/* Start Time */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Start Time <span className="text-red-500">*</span>
-                                </label>
-                                <input
-                                    type="time"
-                                    value={data.start_time}
-                                    onChange={(e) => setData('start_time', e.target.value)}
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                                />
-                                {errors.start_time && <p className="text-red-500 text-sm mt-1">{errors.start_time}</p>}
-                            </div>
-
-                            {/* End Time */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    End Time <span className="text-red-500">*</span>
-                                </label>
-                                <input
-                                    type="time"
-                                    value={data.end_time}
-                                    onChange={(e) => setData('end_time', e.target.value)}
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                                />
-                                {errors.end_time && <p className="text-red-500 text-sm mt-1">{errors.end_time}</p>}
-                            </div>
-                        </div>
-
-                        {/* Duration */}
-                        <div className="mt-6">
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Duration (Minutes) <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                                type="number"
-                                value={data.duration_minutes}
-                                onChange={(e) => setData('duration_minutes', parseInt(e.target.value))}
-                                className="w-full md:w-1/3 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                                min="1"
-                            />
-                            {errors.duration_minutes && <p className="text-red-500 text-sm mt-1">{errors.duration_minutes}</p>}
-                        </div>
-                    </div>
-
-                    {/* Exam Settings Card */}
-                    <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
-                        <div className="flex items-center justify-between mb-6">
-                            <div className="flex items-center">
-                                <Settings className="w-6 h-6 text-purple-600 mr-3" />
-                                <h2 className="text-xl font-semibold text-gray-900">Exam Settings</h2>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setShowAdvanced(!showAdvanced)}
-                                className="text-sm text-blue-600 hover:text-blue-700"
-                            >
-                                {showAdvanced ? 'Hide' : 'Show'} Advanced Options
-                            </button>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {/* Total Marks */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Total Marks <span className="text-red-500">*</span>
-                                </label>
-                                <input
-                                    type="number"
-                                    value={data.total_marks}
-                                    onChange={(e) => setData('total_marks', parseInt(e.target.value))}
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                                    min="1"
-                                />
-                                {errors.total_marks && <p className="text-red-500 text-sm mt-1">{errors.total_marks}</p>}
-                            </div>
-
-                            {/* Pass Mark */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Pass Mark <span className="text-red-500">*</span>
-                                </label>
-                                <input
-                                    type="number"
-                                    value={data.pass_mark}
-                                    onChange={(e) => setData('pass_mark', parseInt(e.target.value))}
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                                    min="0"
-                                    max={data.total_marks}
-                                />
-                                {errors.pass_mark && <p className="text-red-500 text-sm mt-1">{errors.pass_mark}</p>}
-                            </div>
-                        </div>
-
-                        {/* Practical Component */}
-                        <div className="mt-6">
-                            <div className="flex items-center">
-                                <input
-                                    type="checkbox"
-                                    checked={data.has_practical}
-                                    onChange={(e) => setData('has_practical', e.target.checked)}
-                                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                                />
-                                <label className="ml-2 text-sm font-medium text-gray-700">
-                                    This exam has a practical component
-                                </label>
-                            </div>
-
-                            {data.has_practical && (
-                                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-blue-50 rounded-lg">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Theory Percentage
-                                        </label>
-                                        <input
-                                            type="number"
-                                            value={data.theory_percentage}
-                                            onChange={(e) => setData('theory_percentage', parseFloat(e.target.value))}
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                            min="0"
-                                            max="100"
-                                            step="0.1"
+            <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="grid gap-6 lg:grid-cols-3">
+                    {/* Basic Information */}
+                    <div className="lg:col-span-2 space-y-6">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <BookOpen className="h-5 w-5" />
+                                    Basic Information
+                                </CardTitle>
+                                <CardDescription>
+                                    Enter the basic details of the exam
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="grid gap-4 md:grid-cols-2">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="name">Exam Name *</Label>
+                                        <Input
+                                            id="name"
+                                            value={data.name}
+                                            onChange={e => setData('name', e.target.value)}
+                                            placeholder="e.g., Mathematics Mid-Term Exam"
                                         />
+                                        {errors.name && (
+                                            <p className="text-sm text-red-600">{errors.name}</p>
+                                        )}
                                     </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Practical Percentage
-                                        </label>
-                                        <input
-                                            type="number"
-                                            value={data.practical_percentage}
-                                            onChange={(e) => setData('practical_percentage', parseFloat(e.target.value))}
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                            min="0"
-                                            max="100"
-                                            step="0.1"
+
+                                    <div className="space-y-2">
+                                        <Label htmlFor="subject_id">Subject *</Label>
+                                        <Select value={data.subject_id} onValueChange={value => setData('subject_id', value)}>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Select subject" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {subjects.map(subject => (
+                                                    <SelectItem key={subject.id} value={subject.id.toString()}>
+                                                        {subject.name}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        {errors.subject_id && (
+                                            <p className="text-sm text-red-600">{errors.subject_id}</p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label htmlFor="description">Description</Label>
+                                    <Textarea
+                                        id="description"
+                                        value={data.description}
+                                        onChange={e => setData('description', e.target.value)}
+                                        placeholder="Optional description of the exam"
+                                        rows={3}
+                                    />
+                                </div>
+
+                                <div className="grid gap-4 md:grid-cols-3">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="exam_series_id">Exam Series *</Label>
+                                        <Select value={data.exam_series_id} onValueChange={value => setData('exam_series_id', value)}>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Select series" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {examSeries.map(series => (
+                                                    <SelectItem key={series.id} value={series.id.toString()}>
+                                                        {series.name}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        {errors.exam_series_id && (
+                                            <p className="text-sm text-red-600">{errors.exam_series_id}</p>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <Label htmlFor="exam_category_id">Category *</Label>
+                                        <Select value={data.exam_category_id} onValueChange={value => setData('exam_category_id', value)}>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Select category" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {categories.map(category => (
+                                                    <SelectItem key={category.id} value={category.id.toString()}>
+                                                        {category.name}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        {errors.exam_category_id && (
+                                            <p className="text-sm text-red-600">{errors.exam_category_id}</p>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <Label htmlFor="grading_system_id">Grading System *</Label>
+                                        <Select value={data.grading_system_id} onValueChange={value => setData('grading_system_id', value)}>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Select grading" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {gradingSystems.map(system => (
+                                                    <SelectItem key={system.id} value={system.id.toString()}>
+                                                        {system.name}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        {errors.grading_system_id && (
+                                            <p className="text-sm text-red-600">{errors.grading_system_id}</p>
+                                        )}
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        {/* Class and Stream Selection */}
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Users className="h-5 w-5" />
+                                    Target Students
+                                </CardTitle>
+                                <CardDescription>
+                                    Select the class and stream for this exam
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="grid gap-4 md:grid-cols-2">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="class_id">Class *</Label>
+                                        <Select value={selectedClass} onValueChange={setSelectedClass}>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Select class" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {classes.map(cls => (
+                                                    <SelectItem key={cls.id} value={cls.id.toString()}>
+                                                        {cls.name}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        {errors.class_id && (
+                                            <p className="text-sm text-red-600">{errors.class_id}</p>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <Label htmlFor="stream_id">Stream (Optional)</Label>
+                                        <Select 
+                                            value={data.stream_id} 
+                                            onValueChange={value => setData('stream_id', value)}
+                                            disabled={!selectedClass || availableStreams.length === 0}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder={
+                                                    !selectedClass ? "Select class first" : 
+                                                    availableStreams.length === 0 ? "No streams available" : 
+                                                    "Select stream (optional)"
+                                                } />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {availableStreams.map(stream => (
+                                                    <SelectItem key={stream.id} value={stream.id.toString()}>
+                                                        {stream.name}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        {errors.stream_id && (
+                                            <p className="text-sm text-red-600">{errors.stream_id}</p>
+                                        )}
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        {/* Exam Schedule */}
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Calendar className="h-5 w-5" />
+                                    Schedule
+                                </CardTitle>
+                                <CardDescription>
+                                    Set the date and time for the exam
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="grid gap-4 md:grid-cols-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="date">Exam Date *</Label>
+                                        <Input
+                                            id="date"
+                                            type="date"
+                                            value={data.date}
+                                            onChange={e => setData('date', e.target.value)}
                                         />
+                                        {errors.date && (
+                                            <p className="text-sm text-red-600">{errors.date}</p>
+                                        )}
                                     </div>
-                                    {(data.theory_percentage + data.practical_percentage) !== 100 && (
-                                        <div className="col-span-2">
-                                            <p className="text-red-500 text-sm">
-                                                Theory and practical percentages must add up to 100%
-                                            </p>
+
+                                    <div className="space-y-2">
+                                        <Label htmlFor="start_time">Start Time *</Label>
+                                        <Input
+                                            id="start_time"
+                                            type="time"
+                                            value={data.start_time}
+                                            onChange={e => setData('start_time', e.target.value)}
+                                        />
+                                        {errors.start_time && (
+                                            <p className="text-sm text-red-600">{errors.start_time}</p>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <Label htmlFor="end_time">End Time *</Label>
+                                        <Input
+                                            id="end_time"
+                                            type="time"
+                                            value={data.end_time}
+                                            onChange={e => setData('end_time', e.target.value)}
+                                        />
+                                        {errors.end_time && (
+                                            <p className="text-sm text-red-600">{errors.end_time}</p>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <Label htmlFor="duration_minutes">Duration (minutes)</Label>
+                                        <Input
+                                            id="duration_minutes"
+                                            type="number"
+                                            value={data.duration_minutes}
+                                            onChange={e => setData('duration_minutes', e.target.value)}
+                                            readOnly
+                                            className="bg-muted"
+                                        />
+                                        {errors.duration_minutes && (
+                                            <p className="text-sm text-red-600">{errors.duration_minutes}</p>
+                                        )}
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        {/* Instructions */}
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Exam Instructions</CardTitle>
+                                <CardDescription>
+                                    Special instructions for students taking this exam
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <Textarea
+                                    value={data.instructions}
+                                    onChange={e => setData('instructions', e.target.value)}
+                                    placeholder="Enter any special instructions for this exam..."
+                                    rows={4}
+                                />
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    {/* Sidebar */}
+                    <div className="space-y-6">
+                        {/* Marks Configuration */}
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Settings className="h-5 w-5" />
+                                    Marks Configuration
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="total_marks">Total Marks *</Label>
+                                    <Input
+                                        id="total_marks"
+                                        type="number"
+                                        value={data.total_marks}
+                                        onChange={e => setData('total_marks', e.target.value)}
+                                        placeholder="100"
+                                    />
+                                    {errors.total_marks && (
+                                        <p className="text-sm text-red-600">{errors.total_marks}</p>
+                                    )}
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label htmlFor="pass_mark">Pass Mark *</Label>
+                                    <Input
+                                        id="pass_mark"
+                                        type="number"
+                                        value={data.pass_mark}
+                                        onChange={e => setData('pass_mark', e.target.value)}
+                                        placeholder="50"
+                                    />
+                                    {errors.pass_mark && (
+                                        <p className="text-sm text-red-600">{errors.pass_mark}</p>
+                                    )}
+                                </div>
+
+                                {/* Practical Component */}
+                                <div className="space-y-4">
+                                    <div className="flex items-center space-x-2">
+                                        <Checkbox
+                                            id="has_practical"
+                                            checked={showPracticalFields}
+                                            onCheckedChange={(checked) => {
+                                                setShowPracticalFields(checked);
+                                                setData('has_practical', checked);
+                                            }}
+                                        />
+                                        <Label htmlFor="has_practical">Has Practical Component</Label>
+                                    </div>
+
+                                    {showPracticalFields && (
+                                        <div className="space-y-3 pl-6 border-l-2 border-blue-200">
+                                            <div className="space-y-2">
+                                                <Label htmlFor="theory_percentage">Theory Percentage *</Label>
+                                                <Input
+                                                    id="theory_percentage"
+                                                    type="number"
+                                                    min="0"
+                                                    max="100"
+                                                    value={data.theory_percentage}
+                                                    onChange={e => setData('theory_percentage', e.target.value)}
+                                                    placeholder="70"
+                                                />
+                                                {errors.theory_percentage && (
+                                                    <p className="text-sm text-red-600">{errors.theory_percentage}</p>
+                                                )}
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <Label htmlFor="practical_percentage">Practical Percentage *</Label>
+                                                <Input
+                                                    id="practical_percentage"
+                                                    type="number"
+                                                    min="0"
+                                                    max="100"
+                                                    value={data.practical_percentage}
+                                                    onChange={e => setData('practical_percentage', e.target.value)}
+                                                    placeholder="30"
+                                                />
+                                                {errors.practical_percentage && (
+                                                    <p className="text-sm text-red-600">{errors.practical_percentage}</p>
+                                                )}
+                                            </div>
+
+                                            {!validatePercentages() && (
+                                                <Alert>
+                                                    <AlertDescription>
+                                                        Theory and practical percentages must add up to 100%
+                                                    </AlertDescription>
+                                                </Alert>
+                                            )}
                                         </div>
                                     )}
                                 </div>
-                            )}
-                        </div>
+                            </CardContent>
+                        </Card>
 
-                        {/* Advanced Options */}
-                        {showAdvanced && (
-                            <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-                                <h3 className="text-lg font-medium text-gray-900 mb-4">Additional Instructions</h3>
-                                <textarea
-                                    value={data.instructions}
-                                    onChange={(e) => setData('instructions', e.target.value)}
-                                    rows="4"
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                                    placeholder="Special instructions for students, teachers, or invigilators..."
-                                />
-                            </div>
-                        )}
+                        {/* Actions */}
+                        <Card>
+                            <CardContent className="pt-6">
+                                <div className="space-y-3">
+                                    <Button 
+                                        type="submit" 
+                                        className="w-full" 
+                                        disabled={processing || !validatePercentages()}
+                                    >
+                                        <Save className="mr-2 h-4 w-4" />
+                                        {processing ? 'Creating...' : 'Create Exam'}
+                                    </Button>
+                                    
+                                    <Button 
+                                        type="button" 
+                                        variant="outline" 
+                                        className="w-full"
+                                        onClick={() => reset()}
+                                    >
+                                        Reset Form
+                                    </Button>
+                                </div>
+                            </CardContent>
+                        </Card>
                     </div>
-
-                    {/* Submit Button */}
-                    <div className="flex justify-end space-x-4">
-                        <button
-                            type="button"
-                            onClick={() => window.history.back()}
-                            className="px-6 py-3 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={processing}
-                            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center"
-                        >
-                            {processing ? (
-                                <>
-                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                                    Creating Exam...
-                                </>
-                            ) : (
-                                <>
-                                    <Check className="w-4 h-4 mr-2" />
-                                    Create Exam
-                                </>
-                            )}
-                        </button>
-                    </div>
-                </form>
-            </div>
+                </div>
+            </form>
         </div>
     );
 }
