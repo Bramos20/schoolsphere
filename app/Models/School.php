@@ -45,4 +45,24 @@ class School extends Model
     {
         return $this->hasMany(Subject::class);
     }
+
+    public function gradingSystems()
+    {
+        return $this->hasMany(GradingSystem::class);
+    }
+
+    public function examCategories()
+    {
+        return $this->hasMany(ExamCategory::class);
+    }
+
+    public function examSeries()
+    {
+        return $this->hasMany(ExamSeries::class);
+    }
+
+    public function getDefaultGradingSystem()
+    {
+        return $this->gradingSystems()->where('is_default', true)->first();
+    }
 }

@@ -28,4 +28,24 @@ class Student extends Model
     public function stream() {
         return $this->belongsTo(Stream::class);
     }
+
+    public function examResults()
+    {
+        return $this->hasMany(ExamResult::class);
+    }
+
+    public function termSummaries()
+    {
+        return $this->hasMany(StudentTermSummary::class);
+    }
+
+    public function getResultsForSeries($examSeriesId)
+    {
+        return $this->examResults()
+            ->whereHas('exam', function($query) use ($examSeriesId) {
+                $query->where('exam_series_id', $examSeriesId);
+            })
+            ->with('exam.subject')
+            ->get();
+    }
 }
