@@ -261,10 +261,10 @@ Route::prefix('schools/{school}')->group(function () {
     Route::get('/exams/{exam}/statistics', [ExamController::class, 'getStatistics'])->name('exams.statistics');
     
     // Individual Result Management
-    Route::get('/exams/{exam}/results/create', [ExamResultController::class, 'create'])->name('exam-results.create');
-    Route::post('/exams/{exam}/results', [ExamResultController::class, 'store'])->name('exam-results.store');
-    Route::put('/exam-results/{examResult}', [ExamResultController::class, 'update'])->name('exam-results.update');
-    Route::delete('/exam-results/{examResult}', [ExamResultController::class, 'destroy'])->name('exam-results.destroy');
+    Route::get('/exams/{exam}/results/create', [ExamResultController::class, 'create'])->name('exam_results.create');
+    Route::post('/exams/{exam}/results', [ExamResultController::class, 'store'])->name('exam_results.store');
+    Route::put('/exam-results/{examResult}', [ExamResultController::class, 'update'])->name('exam_results.update');
+    Route::delete('/exam-results/{examResult}', [ExamResultController::class, 'destroy'])->name('exam_results.destroy');
 });
 
 // Student and Parent Portal Routes
