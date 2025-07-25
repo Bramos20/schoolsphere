@@ -24,7 +24,7 @@ export default function ExamResultCreate({ school, exam, students }) {
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        post(route('exam-results.store', [school.id, exam.id]));
+        post(route('exam_results.store', [school.id, exam.id]));
     };
 
     const handleStudentSelect = (studentId) => {
