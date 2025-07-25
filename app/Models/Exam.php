@@ -88,9 +88,9 @@ class Exam extends Model
     public function getEligibleStudents()
     {
         if ($this->stream_id) {
-            return $this->stream->students();
+            return $this->stream->students;
         }
-        return $this->class->students();
+        return $this->class->students;
     }
 
     // Calculate statistics for this exam
