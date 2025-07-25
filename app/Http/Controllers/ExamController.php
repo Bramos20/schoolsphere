@@ -132,16 +132,14 @@ class ExamController extends Controller
         DB::transaction(function () use ($request, $exam) {
             foreach ($request->results as $resultData) {
                 if (!empty($resultData['theory_score']) || !empty($resultData['practical_score']) || $resultData['is_absent']) {
-                    $result = $exam->results()->updateOrCreate(
-                        ['student_id' => $resultData['student_id']],
-                        [
-                            'theory_score' => $resultData['theory_score'] ?? 0,
-                            'practical_score' => $resultData['practical_score'] ?? 0,
-                            'is_absent' => $resultData['is_absent'] ?? false,
-                            'entered_by' => auth()->id(),
-                            'entered_at' => now(),
-                        ]
-                    );
+                    $result = $exam->results()->firstOrNew(['student_id' => $resultData['student_id']]);
+                    $result->fill([
+                        'theory_score' => $resultData['theory_score'] ?? 0,
+                        'practical_score' => $resultData['practical_score'] ?? 0,
+                        'is_absent' => $resultData['is_absent'] ?? false,
+                        'entered_by' => auth()->id(),
+                        'entered_at' => now(),
+                    ]);
 
                     // Calculate total score and assign grade
                     $result->total_score = $result->calculateTotalScore();
