@@ -12,7 +12,7 @@ export default function Show({ school, exam }) {
                         <div className="p-6 bg-white border-b border-gray-200">
                             <div className="flex justify-between items-center">
                                 <h1 className="text-2xl font-bold">Exam Details</h1>
-                                <Link href={route('exam_results.create', exam)} className="px-4 py-2 bg-blue-500 text-white rounded-md">
+                                <Link href={route('exam_results.create', { school: school, exam: exam })} className="px-4 py-2 bg-blue-500 text-white rounded-md">
                                     Add Result
                                 </Link>
                             </div>
