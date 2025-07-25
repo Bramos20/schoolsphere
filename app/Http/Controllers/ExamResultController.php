@@ -12,7 +12,7 @@ class ExamResultController extends Controller
 {
     public function create(School $school, Exam $exam)
     {
-        $students = $exam->getEligibleStudents()->get();
+        $students = $exam->getEligibleStudents();
 
         return Inertia::render('SchoolAdmin/ExamResults/Create', [
             'school' => $school,
