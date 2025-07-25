@@ -109,7 +109,7 @@ class ExamController extends Controller
 
     public function bulkResultsImport(School $school, Exam $exam)
     {
-        $students = $exam->getEligibleStudents()->get();
+        $students = $exam->getEligibleStudents();
 
         return Inertia::render('SchoolAdmin/Exams/BulkImport', [
             'school' => $school,
