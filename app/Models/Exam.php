@@ -14,31 +14,29 @@ class Exam extends Model
         'exam_series_id',
         'exam_category_id',
         'grading_system_id',
-        'class_id',
-        'stream_id',
-        'subject_id',
         'name',
         'description',
         'date',
         'start_time',
         'end_time',
         'duration_minutes',
-        'total_marks',
-        'pass_mark',
-        'has_practical', // For subjects with practical components
-        'practical_percentage',
-        'theory_percentage',
         'instructions',
         'is_published',
-        'created_by'
+        'created_by',
+        // New fields for enhanced functionality
+        'scope_type', // 'all_school', 'selected_classes', 'single_class'
+        'subject_scope_type', // 'all_subjects', 'selected_subjects', 'single_subject'
+        'exam_status', // 'draft', 'active', 'completed', 'published'
+        'term', // 1, 2, 3
+        'academic_year'
     ];
 
     protected $casts = [
         'date' => 'date',
-        'has_practical' => 'boolean',
         'is_published' => 'boolean'
     ];
 
+    // Relationships
     public function school()
     {
         return $this->belongsTo(School::class);
@@ -59,19 +57,21 @@ class Exam extends Model
         return $this->belongsTo(GradingSystem::class);
     }
 
-    public function class()
+    public function creator()
     {
-        return $this->belongsTo(SchoolClass::class, 'class_id');
+        return $this->belongsTo(User::class, 'created_by');
     }
 
-    public function stream()
+    // Many-to-many relationships for flexible assignment
+    public function classes()
     {
-        return $this->belongsTo(Stream::class);
+        return $this->belongsToMany(SchoolClass::class, 'exam_classes', 'exam_id', 'class_id');
     }
 
-    public function subject()
+    public function subjects()
     {
-        return $this->belongsTo(Subject::class);
+        return $this->belongsToMany(Subject::class, 'exam_subjects', 'exam_id', 'subject_id')
+                    ->withPivot(['total_marks', 'pass_mark', 'has_papers', 'paper_breakdown']);
     }
 
     public function results()
@@ -79,37 +79,78 @@ class Exam extends Model
         return $this->hasMany(ExamResult::class);
     }
 
-    public function creator()
+    public function examPapers()
     {
-        return $this->belongsTo(User::class, 'created_by');
+        return $this->hasMany(ExamPaper::class);
     }
 
-    // Get students who should take this exam
+    // Get all students eligible for this exam
     public function getEligibleStudents()
     {
-        if ($this->stream_id) {
-            return $this->stream->students;
+        $students = collect();
+
+        foreach ($this->classes as $class) {
+            $students = $students->merge($class->students);
         }
-        return $this->class->students;
+
+        return $students->unique('id');
     }
 
-    // Calculate statistics for this exam
+    // Get subjects a teacher can enter results for
+    public function getSubjectsForTeacher($teacherId)
+    {
+        return $this->subjects()->whereHas('streamAssignments', function ($query) use ($teacherId) {
+            $query->where('teacher_id', $teacherId);
+        })->get();
+    }
+
+    // Check if a teacher can enter results for a specific subject
+    public function canTeacherEnterResults($teacherId, $subjectId)
+    {
+        return SubjectTeacherStream::where('teacher_id', $teacherId)
+                                  ->where('subject_id', $subjectId)
+                                  ->exists();
+    }
+
+    // Calculate comprehensive statistics
     public function getStatistics()
     {
-        $results = $this->results;
+        $results = $this->results()->with(['student', 'examPapers'])->get();
         
         if ($results->isEmpty()) {
             return null;
         }
 
-        $scores = $results->pluck('total_score');
-        
-        return [
-            'total_students' => $results->count(),
-            'highest_score' => $scores->max(),
-            'lowest_score' => $scores->min(),
-            'average_score' => round($scores->avg(), 2),
-            'pass_rate' => round(($results->where('total_score', '>=', $this->pass_mark)->count() / $results->count()) * 100, 2)
+        $stats = [
+            'total_students' => $results->groupBy('student_id')->count(),
+            'subjects' => [],
+            'overall' => []
         ];
+
+        // Subject-wise statistics
+        foreach ($this->subjects as $subject) {
+            $subjectResults = $results->where('subject_id', $subject->id);
+            $totalMarks = $subjectResults->sum('total_marks');
+            
+            $stats['subjects'][$subject->id] = [
+                'name' => $subject->name,
+                'students_attempted' => $subjectResults->where('is_absent', false)->count(),
+                'highest_score' => $subjectResults->where('is_absent', false)->max('total_marks'),
+                'lowest_score' => $subjectResults->where('is_absent', false)->min('total_marks'),
+                'average_score' => $subjectResults->where('is_absent', false)->avg('total_marks'),
+                'pass_rate' => $this->calculatePassRate($subjectResults, $subject->pivot->pass_mark ?? 40)
+            ];
+        }
+
+        return $stats;
+    }
+
+    private function calculatePassRate($results, $passMark)
+    {
+        $attempted = $results->where('is_absent', false);
+        if ($attempted->isEmpty()) return 0;
+        
+        $passed = $attempted->where('total_marks', '>=', $passMark);
+        return round(($passed->count() / $attempted->count()) * 100, 2);
     }
 }

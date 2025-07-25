@@ -14,19 +14,25 @@ class StudentTermSummary extends Model
         'exam_series_id',
         'class_id',
         'stream_id',
+        'academic_year',
+        'term',
         'total_subjects',
         'total_points',
+        'total_marks',
         'average_score',
         'average_grade',
         'overall_position',
         'class_position',
         'stream_position',
-        'remarks',
-        'generated_at'
+        'teacher_comments',
+        'head_teacher_comments',
+        'generated_at',
+        'published_at'
     ];
 
     protected $casts = [
-        'generated_at' => 'datetime'
+        'generated_at' => 'datetime',
+        'published_at' => 'datetime'
     ];
 
     public function student()
@@ -47,5 +53,16 @@ class StudentTermSummary extends Model
     public function stream()
     {
         return $this->belongsTo(Stream::class);
+    }
+
+    // Get detailed subject results for this term
+    public function getSubjectResults()
+    {
+        return ExamResult::where('student_id', $this->student_id)
+                        ->whereHas('exam', function ($query) {
+                            $query->where('exam_series_id', $this->exam_series_id);
+                        })
+                        ->with(['subject', 'exam'])
+                        ->get();
     }
 }

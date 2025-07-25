@@ -12,21 +12,24 @@ class ExamResult extends Model
     protected $fillable = [
         'exam_id',
         'student_id',
-        'theory_score',
-        'practical_score',
-        'total_score',
+        'subject_id',
+        'total_marks', // Calculated from all papers
         'grade',
         'points',
-        'position',
+        'position', // Position in this subject
+        'class_position', // Position in class for this subject
         'remarks',
         'is_absent',
         'entered_by',
-        'entered_at'
+        'entered_at',
+        'verified_by',
+        'verified_at'
     ];
 
     protected $casts = [
         'is_absent' => 'boolean',
-        'entered_at' => 'datetime'
+        'entered_at' => 'datetime',
+        'verified_at' => 'datetime'
     ];
 
     public function exam()
@@ -39,24 +42,43 @@ class ExamResult extends Model
         return $this->belongsTo(Student::class);
     }
 
+    public function subject()
+    {
+        return $this->belongsTo(Subject::class);
+    }
+
+    public function paperResults()
+    {
+        return $this->hasMany(ExamPaperResult::class, 'exam_result_id');
+    }
+
     public function enteredBy()
     {
         return $this->belongsTo(User::class, 'entered_by');
     }
 
-    // Calculate total score based on theory and practical components
-    public function calculateTotalScore()
+    public function verifiedBy()
     {
-        if ($this->exam->has_practical) {
-            $theory_contribution = ($this->theory_score * $this->exam->theory_percentage) / 100;
-            $practical_contribution = ($this->practical_score * $this->exam->practical_percentage) / 100;
-            return $theory_contribution + $practical_contribution;
-        }
-        
-        return $this->theory_score;
+        return $this->belongsTo(User::class, 'verified_by');
     }
 
-    // Auto-assign grade based on total score
+    // Calculate total marks from all papers
+    public function calculateTotalMarks()
+    {
+        $paperResults = $this->paperResults;
+        $totalWeightedMarks = 0;
+
+        foreach ($paperResults as $paperResult) {
+            if (!$paperResult->is_absent) {
+                $weight = $paperResult->examPaper->percentage_weight / 100;
+                $totalWeightedMarks += ($paperResult->marks * $weight);
+            }
+        }
+
+        return round($totalWeightedMarks, 2);
+    }
+
+    // Auto-assign grade and points
     public function assignGrade()
     {
         if ($this->is_absent) {
@@ -65,7 +87,7 @@ class ExamResult extends Model
             return;
         }
 
-        $grade = $this->exam->gradingSystem->getGradeForScore($this->total_score);
+        $grade = $this->exam->gradingSystem->getGradeForScore($this->total_marks);
         
         if ($grade) {
             $this->grade = $grade->grade;
