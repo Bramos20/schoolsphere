@@ -249,15 +249,15 @@ Route::middleware(['auth'])->prefix('schools/{school}')->group(function () {
         Route::get('/exams/create', [ExamController::class, 'create'])->name('exams.create');
         Route::post('/exams', [ExamController::class, 'store'])->name('exams.store');
     });
-    
+
     Route::middleware(['can:update,exam'])->group(function () {
         Route::get('/exams/{exam}/edit', [ExamController::class, 'edit'])->name('exams.edit');
         Route::put('/exams/{exam}', [ExamController::class, 'update'])->name('exams.update');
     });
-    
-    Route::delete('/exams/{exam}', [ExamController::class, 'destroy'])
-        ->name('exams.destroy')
-        ->middleware('can:delete,exam');
+
+    Route::middleware(['can:delete,exam'])->group(function () {
+        Route::delete('/exams/{exam}', [ExamController::class, 'destroy'])->name('exams.destroy');
+    });
         
     // Publishing and reporting (admin only)
     Route::post('/exams/{exam}/publish', [ExamController::class, 'publishResults'])
