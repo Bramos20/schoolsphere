@@ -12,9 +12,12 @@ use App\Models\StudentTermSummary;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 
 class ExamController extends Controller
 {
+    use AuthorizesRequests;
+
     public function index(School $school)
     {
         $user = auth()->user();
