@@ -144,10 +144,31 @@ export default function CreateExam({ school, classes, subjects, examSeries, cate
         setData('selected_classes', updated);
     };
 
+    const handleSingleSubjectSelection = (subjectId) => {
+        setData('single_subject_id', subjectId);
+        const subject = subjects.find(s => s.id === subjectId);
+        setSubjectSettings({
+            [subjectId]: {
+                subject_id: subjectId,
+                subject_name: subject.name,
+                total_marks: 100,
+                pass_mark: 40,
+                has_papers: false,
+                paper_count: 1,
+                papers: []
+            }
+        });
+    };
+
     const handleSubmit = (e) => {
         e.preventDefault();
         
-        const settingsArray = Object.values(subjectSettings);
+        let settingsArray = [];
+        if (data.subject_scope_type === 'single_subject') {
+            settingsArray = Object.values(subjectSettings);
+        } else {
+            settingsArray = Object.values(subjectSettings);
+        }
         
         setData(prevData => ({ ...prevData, subject_settings: settingsArray }));
         post(route('exams.store', { school: school.id }));
@@ -396,7 +417,7 @@ export default function CreateExam({ school, classes, subjects, examSeries, cate
                                     {data.subject_scope_type === 'single_subject' && (
                                         <div>
                                             <Label htmlFor="single_subject_id">Select Subject *</Label>
-                                            <Select value={data.single_subject_id} onValueChange={(value) => setData('single_subject_id', value)}>
+                                            <Select value={data.single_subject_id} onValueChange={(value) => handleSingleSubjectSelection(value)}>
                                                 <SelectTrigger>
                                                     <SelectValue placeholder="Select a subject" />
                                                 </SelectTrigger>
