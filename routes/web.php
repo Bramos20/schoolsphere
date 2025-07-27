@@ -291,36 +291,36 @@ Route::middleware(['auth'])->prefix('schools/{school}')->group(function () {
     
     // Subject-specific result management for teachers
     Route::middleware(['can:manage-subject-results'])->group(function () {
-        Route::get('/my-subjects/results', [TeacherResultController::.class, 'index'])->name('teacher.results.index');
-        Route::get('/my-subjects/{subject}/exams/{exam}/results', [TeacherResultController::.class, 'show'])->name('teacher.results.show');
-        Route::post('/my-subjects/{subject}/exams/{exam}/results', [TeacherResultController::.class, 'store'])->name('teacher.results.store');
-        Route::put('/my-subjects/{subject}/results/{result}', [TeacherResultController::.class, 'update'])->name('teacher.results.update');
+        Route::get('/my-subjects/results', [TeacherResultController::class, 'index'])->name('teacher.results.index');
+        Route::get('/my-subjects/{subject}/exams/{exam}/results', [TeacherResultController::class, 'show'])->name('teacher.results.show');
+        Route::post('/my-subjects/{subject}/exams/{exam}/results', [TeacherResultController::class, 'store'])->name('teacher.results.store');
+        Route::put('/my-subjects/{subject}/results/{result}', [TeacherResultController::class, 'update'])->name('teacher.results.update');
     });
 
     // Student Term Summary Routes
     Route::middleware(['role:school_admin'])->group(function () {
-        Route::get('/term-summaries', [StudentTermSummaryController::.class, 'index'])->name('term-summaries.index');
-        Route::get('/term-summaries/{examSeries}', [StudentTermSummaryController::.class, 'show'])->name('term-summaries.show');
-        Route::post('/term-summaries/{examSeries}/generate', [StudentTermSummaryController::.class, 'generate'])->name('term-summaries.generate');
-        Route::post('/term-summaries/{examSeries}/publish', [StudentTermSummaryController::.class, 'publish'])->name('term-summaries.publish');
+        Route::get('/term-summaries', [StudentTermSummaryController::class, 'index'])->name('term-summaries.index');
+        Route::get('/term-summaries/{examSeries}', [StudentTermSummaryController::class, 'show'])->name('term-summaries.show');
+        Route::post('/term-summaries/{examSeries}/generate', [StudentTermSummaryController::class, 'generate'])->name('term-summaries.generate');
+        Route::post('/term-summaries/{examSeries}/publish', [StudentTermSummaryController::class, 'publish'])->name('term-summaries.publish');
 
         // Individual student reports
-        Route::get('/students/{student}/term-report/{examSeries}', [StudentTermSummaryController::.class, 'studentReport'])->name('student.term-report');
-        Route::get('/students/{student}/term-report/{examSeries}/pdf', [StudentTermSummaryController::.class, 'studentReportPdf'])->name('student.term-report.pdf');
+        Route::get('/students/{student}/term-report/{examSeries}', [StudentTermSummaryController::class, 'studentReport'])->name('student.term-report');
+        Route::get('/students/{student}/term-report/{examSeries}/pdf', [StudentTermSummaryController::class, 'studentReportPdf'])->name('student.term-report.pdf');
     });
 
     // Class-wise reports
     Route::middleware(['can:view-class-reports'])->group(function () {
-        Route::get('/classes/{class}/exam-reports', [ClassReportController::.class, 'index'])->name('class.reports.index');
-        Route::get('/classes/{class}/exam-series/{examSeries}/report', [ClassReportController::.class, 'show'])->name('class.reports.show');
-        Route::get('/classes/{class}/exam-series/{examSeries}/analysis', [ClassReportController::.class, 'analysis'])->name('class.reports.analysis');
+        Route::get('/classes/{class}/exam-reports', [ClassReportController::class, 'index'])->name('class.reports.index');
+        Route::get('/classes/{class}/exam-series/{examSeries}/report', [ClassReportController::class, 'show'])->name('class.reports.show');
+        Route::get('/classes/{class}/exam-series/{examSeries}/analysis', [ClassReportController::class, 'analysis'])->name('class.reports.analysis');
     });
 
     // Subject analysis routes
     Route::middleware(['can:view-subject-analysis'])->group(function () {
-        Route::get('/subjects/{subject}/analysis', [SubjectAnalysisController::.class, 'index'])->name('subject.analysis.index');
-        Route::get('/subjects/{subject}/exam-series/{examSeries}/analysis', [SubjectAnalysisController::.class, 'show'])->name('subject.analysis.show');
-        Route::get('/subjects/{subject}/exam/{exam}/detailed-analysis', [SubjectAnalysisController::.class, 'detailedAnalysis'])->name('subject.analysis.detailed');
+        Route::get('/subjects/{subject}/analysis', [SubjectAnalysisController::class, 'index'])->name('subject.analysis.index');
+        Route::get('/subjects/{subject}/exam-series/{examSeries}/analysis', [SubjectAnalysisController::class, 'show'])->name('subject.analysis.show');
+        Route::get('/subjects/{subject}/exam/{exam}/detailed-analysis', [SubjectAnalysisController::class, 'detailedAnalysis'])->name('subject.analysis.detailed');
     });
 });
 
