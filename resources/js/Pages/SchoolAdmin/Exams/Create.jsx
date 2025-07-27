@@ -165,13 +165,34 @@ export default function CreateExam({ school, classes, subjects, examSeries, cate
         
         let settingsArray = [];
         if (data.subject_scope_type === 'single_subject') {
-            settingsArray = Object.values(subjectSettings);
+            const subject = subjects.find(s => s.id === data.single_subject_id);
+            if (subject) {
+                settingsArray = [{
+                    subject_id: data.single_subject_id,
+                    subject_name: subject.name,
+                    total_marks: 100,
+                    pass_mark: 40,
+                    has_papers: false,
+                    paper_count: 1,
+                    papers: []
+                }];
+            }
+        } else if (data.subject_scope_type === 'all_subjects') {
+            settingsArray = subjects.map(subject => ({
+                subject_id: subject.id,
+                subject_name: subject.name,
+                total_marks: 100,
+                pass_mark: 40,
+                has_papers: false,
+                paper_count: 1,
+                papers: []
+            }));
         } else {
             settingsArray = Object.values(subjectSettings);
         }
         
-        setData(prevData => ({ ...prevData, subject_settings: settingsArray }));
-        post(route('exams.store', { school: school.id }));
+        const updatedData = { ...data, subject_settings: settingsArray };
+        post(route('exams.store', { school: school.id }), updatedData);
     };
 
     // Get subjects to show based on scope type
