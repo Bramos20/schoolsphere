@@ -50,23 +50,31 @@ class ExamController extends Controller
         ]);
     }
 
-    public function create(School $school)
+    // public function create(School $school)
+    // {
+    //     $this->authorize('create-exam', $school);
+
+    //     $classes = $school->classes()->with('streams')->get();
+    //     $subjects = $school->subjects()->with('department')->get();
+    //     $examSeries = $school->examSeries()->where('is_active', true)->get();
+    //     $categories = $school->examCategories()->where('is_active', true)->get();
+    //     $gradingSystems = $school->gradingSystems()->where('is_active', true)->get();
+
+    //     return Inertia::render('SchoolAdmin/Exams/Create', [
+    //         'school' => $school,
+    //         'classes' => $classes,
+    //         'subjects' => $subjects,
+    //         'examSeries' => $examSeries,
+    //         'categories' => $categories,
+    //         'gradingSystems' => $gradingSystems,
+    //     ]);
+    // }
+    public function create($schoolId) // Remove type-hinting
     {
-        $this->authorize('create-exam', $school);
-
-        $classes = $school->classes()->with('streams')->get();
-        $subjects = $school->subjects()->with('department')->get();
-        $examSeries = $school->examSeries()->where('is_active', true)->get();
-        $categories = $school->examCategories()->where('is_active', true)->get();
-        $gradingSystems = $school->gradingSystems()->where('is_active', true)->get();
-
-        return Inertia::render('SchoolAdmin/Exams/Create', [
-            'school' => $school,
-            'classes' => $classes,
-            'subjects' => $subjects,
-            'examSeries' => $examSeries,
-            'categories' => $categories,
-            'gradingSystems' => $gradingSystems,
+        return response()->json([
+            'reached_controller' => true,
+            'school' => School::find($schoolId),
+            'auth' => auth()->user()
         ]);
     }
 
