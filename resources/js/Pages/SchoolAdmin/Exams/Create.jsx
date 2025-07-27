@@ -149,12 +149,11 @@ export default function CreateExam({ school, classes, subjects, examSeries, cate
         
         const settingsArray = Object.values(subjectSettings);
         
-        const updatedData = {
-            ...data,
-            subject_settings: settingsArray,
-        };
-
-        post(route('exams.store', { school: school.id }), updatedData);
+        setData('subject_settings', settingsArray, {
+            onSuccess: () => {
+                post(route('exams.store', { school: school.id }));
+            }
+        });
     };
 
     // Get subjects to show based on scope type
