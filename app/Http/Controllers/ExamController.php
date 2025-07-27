@@ -75,6 +75,9 @@ class ExamController extends Controller
 
     public function store(Request $request, School $school)
     {
+        \Log::info('ExamController@store method called.');
+        \Log::info($request->all());
+
         $this->authorize('create-exam', $school);
 
         $request->validate([
