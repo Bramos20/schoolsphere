@@ -228,76 +228,49 @@ Route::middleware(['auth'])->prefix('schools/{school}')->group(function () {
     Route::delete('/exam-categories/{examCategory}', [ExamCategoryController::class, 'destroy'])->name('exam-categories.destroy');
 });
 
-/*
-|--------------------------------------------------------------------------
-| Enhanced Exam Routes with Simplified Structure
-|--------------------------------------------------------------------------
-*/
+// Enhanced Exam Routes with proper authorization
 Route::middleware(['auth'])->prefix('schools/{school}')->group(function () {
     
-    // Exam management routes (accessible to school_admin and teachers with appropriate permissions)
-    Route::get('/exams', [ExamController::class, 'index'])
-        ->name('exams.index')
-        ->middleware('can:viewAny,App\Models\Exam,school');
-        
-    Route::get('/exams/{exam}', [ExamController::class, 'show'])
-        ->name('exams.show')
-        ->middleware('can:view,exam');
+    // Exam management routes (accessible to school_admin and teachers)
+    Route::get('/exams', [ExamController::class, 'index'])->name('exams.index');
+    Route::get('/exams/create', [ExamController::class, 'create'])->name('exams.create');
+    Route::get('/exams/{exam}', [ExamController::class, 'show'])->name('exams.show');
     
-    // School admin only routes for exam management
-    Route::middleware(['can:create,App\Models\Exam,school'])->group(function () {
-        Route::get('/exams/create', [ExamController::class, 'create'])->name('exams.create');
+    // School admin only routes
+    Route::middleware(['role:school_admin'])->group(function () {
         Route::post('/exams', [ExamController::class, 'store'])->name('exams.store');
-    });
-
-    Route::middleware(['can:update,exam'])->group(function () {
         Route::get('/exams/{exam}/edit', [ExamController::class, 'edit'])->name('exams.edit');
         Route::put('/exams/{exam}', [ExamController::class, 'update'])->name('exams.update');
+        Route::delete('/exams/{exam}', [ExamController::class, 'destroy'])->name('exams.destroy');
+        
+        // Publishing and reporting (admin only)
+        Route::post('/exams/{exam}/publish', [ExamController::class, 'publishResults'])->name('exams.publish');
+        Route::get('/exams/{exam}/reports', [ExamController::class, 'generateTermReports'])->name('exams.reports');
+        Route::get('/exams/{exam}/statistics', [ExamController::class, 'getStatistics'])->name('exams.statistics');
+        
+        // Bulk operations
+        Route::get('/exams/{exam}/bulk-import', [ExamController::class, 'bulkImportResults'])->name('exams.bulk-import');
+        Route::post('/exams/{exam}/bulk-import', [ExamController::class, 'processBulkImport'])->name('exams.bulk-import.process');
+        
+        // Export routes
+        Route::get('/exams/{exam}/export', [ExamController::class, 'exportResults'])->name('exams.export');
+        Route::get('/exams/{exam}/subjects/{subject}/export', [ExamController::class, 'exportResults'])->name('exams.subject.export');
+    });
+    
+    // Result entry routes (accessible to both admin and teachers)
+    Route::middleware(['can:enter-exam-results'])->group(function () {
+        Route::get('/exams/{exam}/subjects/{subject}/results', [ExamController::class, 'enterResults'])->name('exams.enter-results');
+        Route::post('/exams/{exam}/subjects/{subject}/results', [ExamController::class, 'storeResults'])->name('exams.store-results');
+        Route::put('/exams/{exam}/subjects/{subject}/results/{result}', [ExamController::class, 'updateResult'])->name('exams.update-result');
     });
 
-    Route::middleware(['can:delete,exam'])->group(function () {
-        Route::delete('/exams/{exam}', [ExamController::class, 'destroy'])->name('exams.destroy');
+    // Exam Paper Management
+    Route::middleware(['role:school_admin'])->group(function () {
+        Route::get('/exams/{exam}/papers', [ExamPaperController::class, 'index'])->name('exam-papers.index');
+        Route::post('/exams/{exam}/papers', [ExamPaperController::class, 'store'])->name('exam-papers.store');
+        Route::put('/exam-papers/{examPaper}', [ExamPaperController::class, 'update'])->name('exam-papers.update');
+        Route::delete('/exam-papers/{examPaper}', [ExamPaperController::class, 'destroy'])->name('exam-papers.destroy');
     });
-        
-    // Publishing and reporting (admin only)
-    Route::post('/exams/{exam}/publish', [ExamController::class, 'publishResults'])
-        ->name('exams.publish')
-        ->middleware('can:publishResults,exam');
-        
-    Route::get('/exams/{exam}/reports', [ExamController::class, 'generateTermReports'])
-        ->name('exams.reports')
-        ->middleware('can:generateReports,school');
-        
-    Route::get('/exams/{exam}/statistics', [ExamController::class, 'getStatistics'])
-        ->name('exams.statistics')
-        ->middleware('can:viewStatistics,exam');
-        
-    // Bulk operations (admin only)
-    Route::get('/exams/{exam}/bulk-import', [ExamController::class, 'bulkImportResults'])
-        ->name('exams.bulk-import')
-        ->middleware('can:importResults,school');
-        
-    Route::post('/exams/{exam}/bulk-import', [ExamController::class, 'processBulkImport'])
-        ->name('exams.bulk-import.process')
-        ->middleware('can:importResults,school');
-        
-    // Export routes
-    Route::get('/exams/{exam}/export', [ExamController::class, 'exportResults'])
-        ->name('exams.export')
-        ->middleware('can:exportResults,school');
-        
-    Route::get('/exams/{exam}/subjects/{subject}/export', [ExamController::class, 'exportResults'])
-        ->name('exams.subject.export')
-        ->middleware('can:exportResults,school');
-    
-    // Result entry routes (accessible to both admin and teachers based on subject assignment)
-    Route::get('/exams/{exam}/subjects/{subject}/results', [ExamController::class, 'enterResults'])
-        ->name('exams.enter-results')
-        ->middleware('can:enterResults,exam,subject');
-        
-    Route::post('/exams/{exam}/subjects/{subject}/results', [ExamController::class, 'storeResults'])
-        ->name('exams.store-results')
-        ->middleware('can:enterResults,exam,subject');
     
     // Enhanced Exam Series Routes
     Route::get('/exam-series', [ExamSeriesController::class, 'index'])->name('exam-series.index');
@@ -318,10 +291,36 @@ Route::middleware(['auth'])->prefix('schools/{school}')->group(function () {
     
     // Subject-specific result management for teachers
     Route::middleware(['can:manage-subject-results'])->group(function () {
-        Route::get('/my-subjects/results', [TeacherResultController::class, 'index'])->name('teacher.results.index');
-        Route::get('/my-subjects/{subject}/exams/{exam}/results', [TeacherResultController::class, 'show'])->name('teacher.results.show');
-        Route::post('/my-subjects/{subject}/exams/{exam}/results', [TeacherResultController::class, 'store'])->name('teacher.results.store');
-        Route::put('/my-subjects/{subject}/results/{result}', [TeacherResultController::class, 'update'])->name('teacher.results.update');
+        Route::get('/my-subjects/results', [TeacherResultController::.class, 'index'])->name('teacher.results.index');
+        Route::get('/my-subjects/{subject}/exams/{exam}/results', [TeacherResultController::.class, 'show'])->name('teacher.results.show');
+        Route::post('/my-subjects/{subject}/exams/{exam}/results', [TeacherResultController::.class, 'store'])->name('teacher.results.store');
+        Route::put('/my-subjects/{subject}/results/{result}', [TeacherResultController::.class, 'update'])->name('teacher.results.update');
+    });
+
+    // Student Term Summary Routes
+    Route::middleware(['role:school_admin'])->group(function () {
+        Route::get('/term-summaries', [StudentTermSummaryController::.class, 'index'])->name('term-summaries.index');
+        Route::get('/term-summaries/{examSeries}', [StudentTermSummaryController::.class, 'show'])->name('term-summaries.show');
+        Route::post('/term-summaries/{examSeries}/generate', [StudentTermSummaryController::.class, 'generate'])->name('term-summaries.generate');
+        Route::post('/term-summaries/{examSeries}/publish', [StudentTermSummaryController::.class, 'publish'])->name('term-summaries.publish');
+
+        // Individual student reports
+        Route::get('/students/{student}/term-report/{examSeries}', [StudentTermSummaryController::.class, 'studentReport'])->name('student.term-report');
+        Route::get('/students/{student}/term-report/{examSeries}/pdf', [StudentTermSummaryController::.class, 'studentReportPdf'])->name('student.term-report.pdf');
+    });
+
+    // Class-wise reports
+    Route::middleware(['can:view-class-reports'])->group(function () {
+        Route::get('/classes/{class}/exam-reports', [ClassReportController::.class, 'index'])->name('class.reports.index');
+        Route::get('/classes/{class}/exam-series/{examSeries}/report', [ClassReportController::.class, 'show'])->name('class.reports.show');
+        Route::get('/classes/{class}/exam-series/{examSeries}/analysis', [ClassReportController::.class, 'analysis'])->name('class.reports.analysis');
+    });
+
+    // Subject analysis routes
+    Route::middleware(['can:view-subject-analysis'])->group(function () {
+        Route::get('/subjects/{subject}/analysis', [SubjectAnalysisController::.class, 'index'])->name('subject.analysis.index');
+        Route::get('/subjects/{subject}/exam-series/{examSeries}/analysis', [SubjectAnalysisController::.class, 'show'])->name('subject.analysis.show');
+        Route::get('/subjects/{subject}/exam/{exam}/detailed-analysis', [SubjectAnalysisController::.class, 'detailedAnalysis'])->name('subject.analysis.detailed');
     });
 });
 
