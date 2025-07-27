@@ -126,11 +126,11 @@ class ExamController extends Controller
             ]);
 
             // Attach classes
-            $classIds = $this->getClassIds($request);
+            $classIds = $this->getClassIds($request, $school);
             $exam->classes()->attach($classIds);
 
             // Attach subjects with settings
-            $this->attachSubjectsWithSettings($exam, $request);
+            $this->attachSubjectsWithSettings($exam, $request, $school);
 
             // Create exam papers for subjects that have them
             $this->createExamPapers($exam, $request);
@@ -140,11 +140,11 @@ class ExamController extends Controller
             ->with('success', 'Exam created successfully.');
     }
 
-    private function getClassIds(Request $request)
+    private function getClassIds(Request $request, School $school)
     {
         switch ($request->scope_type) {
             case 'all_school':
-                return School::find($request->school_id)->classes->pluck('id')->toArray();
+                return $school->classes->pluck('id')->toArray();
             case 'selected_classes':
                 return $request->selected_classes;
             case 'single_class':
@@ -154,9 +154,9 @@ class ExamController extends Controller
         }
     }
 
-    private function attachSubjectsWithSettings($exam, $request)
+    private function attachSubjectsWithSettings($exam, $request, School $school)
     {
-        $subjectIds = $this->getSubjectIds($request);
+        $subjectIds = $this->getSubjectIds($request, $school);
         $pivotData = [];
 
         foreach ($subjectIds as $subjectId) {
@@ -176,11 +176,11 @@ class ExamController extends Controller
         $exam->subjects()->attach($pivotData);
     }
 
-    private function getSubjectIds($request)
+    private function getSubjectIds($request, School $school)
     {
         switch ($request->subject_scope_type) {
             case 'all_subjects':
-                return Subject::where('school_id', $request->school_id)->pluck('id')->toArray();
+                return $school->subjects->pluck('id')->toArray();
             case 'selected_subjects':
                 return $request->selected_subjects;
             case 'single_subject':

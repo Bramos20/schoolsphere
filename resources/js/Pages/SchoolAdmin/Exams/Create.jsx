@@ -147,11 +147,14 @@ export default function CreateExam({ school, classes, subjects, examSeries, cate
     const handleSubmit = (e) => {
         e.preventDefault();
         
-        // Convert subject settings to array format expected by backend
         const settingsArray = Object.values(subjectSettings);
-        setData('subject_settings', settingsArray);
         
-        post(`/schools/${school.id}/exams`);
+        const updatedData = {
+            ...data,
+            subject_settings: settingsArray,
+        };
+
+        post(route('exams.store', { school: school.id }), updatedData);
     };
 
     // Get subjects to show based on scope type
