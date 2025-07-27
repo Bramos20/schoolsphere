@@ -16,23 +16,19 @@ class Exam extends Model
         'grading_system_id',
         'name',
         'description',
-        'date',
-        'start_time',
-        'end_time',
-        'duration_minutes',
+        'start_date',
+        'end_date',
         'instructions',
         'is_published',
         'created_by',
-        // New fields for enhanced functionality
         'scope_type', // 'all_school', 'selected_classes', 'single_class'
         'subject_scope_type', // 'all_subjects', 'selected_subjects', 'single_subject'
         'exam_status', // 'draft', 'active', 'completed', 'published'
-        'term', // 1, 2, 3
-        'academic_year'
     ];
 
     protected $casts = [
-        'date' => 'date',
+        'start_date' => 'date',
+        'end_date' => 'date',
         'is_published' => 'boolean'
     ];
 
@@ -71,7 +67,7 @@ class Exam extends Model
     public function subjects()
     {
         return $this->belongsToMany(Subject::class, 'exam_subjects', 'exam_id', 'subject_id')
-                    ->withPivot(['total_marks', 'pass_mark', 'has_papers', 'paper_breakdown']);
+                    ->withPivot(['total_marks', 'pass_mark', 'has_papers', 'paper_count']);
     }
 
     public function results()
@@ -130,7 +126,6 @@ class Exam extends Model
         // Subject-wise statistics
         foreach ($this->subjects as $subject) {
             $subjectResults = $results->where('subject_id', $subject->id);
-            $totalMarks = $subjectResults->sum('total_marks');
             
             $stats['subjects'][$subject->id] = [
                 'name' => $subject->name,
@@ -152,5 +147,18 @@ class Exam extends Model
         
         $passed = $attempted->where('total_marks', '>=', $passMark);
         return round(($passed->count() / $attempted->count()) * 100, 2);
+    }
+
+    // Check if exam is within the date range
+    public function isActive()
+    {
+        $today = now()->toDateString();
+        return $today >= $this->start_date && $today <= $this->end_date;
+    }
+
+    // Get exam duration in days
+    public function getDurationInDays()
+    {
+        return $this->start_date->diffInDays($this->end_date) + 1;
     }
 }

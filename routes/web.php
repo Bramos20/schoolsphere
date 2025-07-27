@@ -40,6 +40,8 @@ use App\Http\Controllers\TeacherResultController;
 use App\Models\School;
 use App\Models\SchoolClass;
 use App\Models\GradingSystem;
+use App\Models\Subject;
+use App\Models\ExamPaper;
 
 /*
 |--------------------------------------------------------------------------
@@ -105,12 +107,11 @@ Route::middleware(['auth', 'role:company_admin'])->group(function () {
     Route::delete('/schools/{school}', [SchoolController::class, 'destroy'])->name('schools.destroy');
     Route::get('/schools/{school}/assign-admin', [SchoolController::class, 'showAssignAdminForm'])->name('schools.assignAdmin');
     Route::post('/schools/{school}/assign-admin', [SchoolController::class, 'assignAdmin'])->name('schools.assignAdmin');
-
 });
 
 /*
 |--------------------------------------------------------------------------
-| school Admin Dashboard & Routes
+| School Admin Dashboard & Routes
 |--------------------------------------------------------------------------
 */
 Route::middleware(['auth', 'role:school_admin'])->group(function () {
@@ -181,7 +182,6 @@ Route::middleware(['auth', 'role:school_admin'])->group(function () {
         ->name('students.ledger.pdf');
 
     Route::put('/leaves/{leave}/status', [LeaveController::class, 'updateStatus'])->name('leaves.updateStatus');
-
 });
 
 Route::middleware(['auth'])->group(function () {
@@ -192,7 +192,6 @@ Route::middleware(['auth'])->group(function () {
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/schools/{school}/staff-attendance', [StaffAttendanceController::class, 'index'])->name('staff-attendance.index');
     Route::post('/schools/{school}/staff-attendance', [StaffAttendanceController::class, 'store'])->name('staff-attendance.store');
-
 });
 
 Route::middleware(['auth'])->group(function () {
@@ -229,49 +228,76 @@ Route::middleware(['auth'])->prefix('schools/{school}')->group(function () {
     Route::delete('/exam-categories/{examCategory}', [ExamCategoryController::class, 'destroy'])->name('exam-categories.destroy');
 });
 
-// Enhanced Exam Routes with proper authorization
+/*
+|--------------------------------------------------------------------------
+| Enhanced Exam Routes with Simplified Structure
+|--------------------------------------------------------------------------
+*/
 Route::middleware(['auth'])->prefix('schools/{school}')->group(function () {
     
-    // Exam management routes (accessible to school_admin and teachers)
-    Route::get('/exams', [ExamController::class, 'index'])->name('exams.index');
-    Route::get('/exams/create', [ExamController::class, 'create'])->name('exams.create');
-    Route::get('/exams/{exam}', [ExamController::class, 'show'])->name('exams.show');
+    // Exam management routes (accessible to school_admin and teachers with appropriate permissions)
+    Route::get('/exams', [ExamController::class, 'index'])
+        ->name('exams.index')
+        ->middleware('can:viewAny,App\Models\Exam,school');
+        
+    Route::get('/exams/{exam}', [ExamController::class, 'show'])
+        ->name('exams.show')
+        ->middleware('can:view,exam');
     
-    // School admin only routes
-    Route::middleware(['role:school_admin'])->group(function () {
+    // School admin only routes for exam management
+    Route::middleware(['can:create,App\Models\Exam,school'])->group(function () {
+        Route::get('/exams/create', [ExamController::class, 'create'])->name('exams.create');
         Route::post('/exams', [ExamController::class, 'store'])->name('exams.store');
+    });
+    
+    Route::middleware(['can:update,exam'])->group(function () {
         Route::get('/exams/{exam}/edit', [ExamController::class, 'edit'])->name('exams.edit');
         Route::put('/exams/{exam}', [ExamController::class, 'update'])->name('exams.update');
-        Route::delete('/exams/{exam}', [ExamController::class, 'destroy'])->name('exams.destroy');
-        
-        // Publishing and reporting (admin only)
-        Route::post('/exams/{exam}/publish', [ExamController::class, 'publishResults'])->name('exams.publish');
-        Route::get('/exams/{exam}/reports', [ExamController::class, 'generateTermReports'])->name('exams.reports');
-        Route::get('/exams/{exam}/statistics', [ExamController::class, 'getStatistics'])->name('exams.statistics');
-        
-        // Bulk operations
-        Route::get('/exams/{exam}/bulk-import', [ExamController::class, 'bulkImportResults'])->name('exams.bulk-import');
-        Route::post('/exams/{exam}/bulk-import', [ExamController::class, 'processBulkImport'])->name('exams.bulk-import.process');
-        
-        // Export routes
-        Route::get('/exams/{exam}/export', [ExamController::class, 'exportResults'])->name('exams.export');
-        Route::get('/exams/{exam}/subjects/{subject}/export', [ExamController::class, 'exportResults'])->name('exams.subject.export');
     });
     
-    // Result entry routes (accessible to both admin and teachers)
-    Route::middleware(['can:enter-exam-results'])->group(function () {
-        Route::get('/exams/{exam}/subjects/{subject}/results', [ExamController::class, 'enterResults'])->name('exams.enter-results');
-        Route::post('/exams/{exam}/subjects/{subject}/results', [ExamController::class, 'storeResults'])->name('exams.store-results');
-        Route::put('/exams/{exam}/subjects/{subject}/results/{result}', [ExamController::class, 'updateResult'])->name('exams.update-result');
-    });
+    Route::delete('/exams/{exam}', [ExamController::class, 'destroy'])
+        ->name('exams.destroy')
+        ->middleware('can:delete,exam');
+        
+    // Publishing and reporting (admin only)
+    Route::post('/exams/{exam}/publish', [ExamController::class, 'publishResults'])
+        ->name('exams.publish')
+        ->middleware('can:publishResults,exam');
+        
+    Route::get('/exams/{exam}/reports', [ExamController::class, 'generateTermReports'])
+        ->name('exams.reports')
+        ->middleware('can:generateReports,school');
+        
+    Route::get('/exams/{exam}/statistics', [ExamController::class, 'getStatistics'])
+        ->name('exams.statistics')
+        ->middleware('can:viewStatistics,exam');
+        
+    // Bulk operations (admin only)
+    Route::get('/exams/{exam}/bulk-import', [ExamController::class, 'bulkImportResults'])
+        ->name('exams.bulk-import')
+        ->middleware('can:importResults,school');
+        
+    Route::post('/exams/{exam}/bulk-import', [ExamController::class, 'processBulkImport'])
+        ->name('exams.bulk-import.process')
+        ->middleware('can:importResults,school');
+        
+    // Export routes
+    Route::get('/exams/{exam}/export', [ExamController::class, 'exportResults'])
+        ->name('exams.export')
+        ->middleware('can:exportResults,school');
+        
+    Route::get('/exams/{exam}/subjects/{subject}/export', [ExamController::class, 'exportResults'])
+        ->name('exams.subject.export')
+        ->middleware('can:exportResults,school');
     
-    // Exam Paper Management
-    Route::middleware(['role:school_admin'])->group(function () {
-        Route::get('/exams/{exam}/papers', [ExamPaperController::class, 'index'])->name('exam-papers.index');
-        Route::post('/exams/{exam}/papers', [ExamPaperController::class, 'store'])->name('exam-papers.store');
-        Route::put('/exam-papers/{examPaper}', [ExamPaperController::class, 'update'])->name('exam-papers.update');
-        Route::delete('/exam-papers/{examPaper}', [ExamPaperController::class, 'destroy'])->name('exam-papers.destroy');
-    });
+    // Result entry routes (accessible to both admin and teachers based on subject assignment)
+    Route::get('/exams/{exam}/subjects/{subject}/results', [ExamController::class, 'enterResults'])
+        ->name('exams.enter-results')
+        ->middleware('can:enterResults,exam,subject');
+        
+    Route::post('/exams/{exam}/subjects/{subject}/results', [ExamController::class, 'storeResults'])
+        ->name('exams.store-results')
+        ->middleware('can:enterResults,exam,subject');
     
     // Enhanced Exam Series Routes
     Route::get('/exam-series', [ExamSeriesController::class, 'index'])->name('exam-series.index');
@@ -297,61 +323,74 @@ Route::middleware(['auth'])->prefix('schools/{school}')->group(function () {
         Route::post('/my-subjects/{subject}/exams/{exam}/results', [TeacherResultController::class, 'store'])->name('teacher.results.store');
         Route::put('/my-subjects/{subject}/results/{result}', [TeacherResultController::class, 'update'])->name('teacher.results.update');
     });
-    
-    // Student Term Summary Routes
-    Route::middleware(['role:school_admin'])->group(function () {
-        Route::get('/term-summaries', [StudentTermSummaryController::class, 'index'])->name('term-summaries.index');
-        Route::get('/term-summaries/{examSeries}', [StudentTermSummaryController::class, 'show'])->name('term-summaries.show');
-        Route::post('/term-summaries/{examSeries}/generate', [StudentTermSummaryController::class, 'generate'])->name('term-summaries.generate');
-        Route::post('/term-summaries/{examSeries}/publish', [StudentTermSummaryController::class, 'publish'])->name('term-summaries.publish');
-        
-        // Individual student reports
-        Route::get('/students/{student}/term-report/{examSeries}', [StudentTermSummaryController::class, 'studentReport'])->name('student.term-report');
-        Route::get('/students/{student}/term-report/{examSeries}/pdf', [StudentTermSummaryController::class, 'studentReportPdf'])->name('student.term-report.pdf');
-    });
-    
-    // Class-wise reports
-    Route::middleware(['can:view-class-reports'])->group(function () {
-        Route::get('/classes/{class}/exam-reports', [ClassReportController::class, 'index'])->name('class.reports.index');
-        Route::get('/classes/{class}/exam-series/{examSeries}/report', [ClassReportController::class, 'show'])->name('class.reports.show');
-        Route::get('/classes/{class}/exam-series/{examSeries}/analysis', [ClassReportController::class, 'analysis'])->name('class.reports.analysis');
-    });
-    
-    // Subject analysis routes
-    Route::middleware(['can:view-subject-analysis'])->group(function () {
-        Route::get('/subjects/{subject}/analysis', [SubjectAnalysisController::class, 'index'])->name('subject.analysis.index');
-        Route::get('/subjects/{subject}/exam-series/{examSeries}/analysis', [SubjectAnalysisController::class, 'show'])->name('subject.analysis.show');
-        Route::get('/subjects/{subject}/exam/{exam}/detailed-analysis', [SubjectAnalysisController::class, 'detailedAnalysis'])->name('subject.analysis.detailed');
-    });
 });
 
-// Student Portal Routes (for students to view their results)
-Route::middleware(['auth', 'role:student'])->prefix('student')->group(function () {
-    Route::get('/results', [StudentPortalController::class, 'results'])->name('student.results');
-    Route::get('/results/{examSeries}', [StudentPortalController::class, 'termResults'])->name('student.term-results');
-    Route::get('/results/{examSeries}/download', [StudentPortalController::class, 'downloadResults'])->name('student.results.download');
-    Route::get('/subject/{subject}/results', [StudentPortalController::class, 'subjectResults'])->name('student.subject-results');
+/*
+|--------------------------------------------------------------------------
+| HOD Dashboard & Routes
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['auth', 'role:hod'])->group(function () {
+    Route::get('/schools/{school}/students/create', [StudentController::class, 'create'])->name('students.create');
+    Route::post('/schools/{school}/students', [StudentController::class, 'store'])->name('students.store');
+    Route::get('/schools/{school}/students', [StudentController::class, 'index'])->name('students.index');
+    Route::get('/schools/{school}/students/{student}/edit', [StudentController::class, 'edit'])->name('students.edit');
+    Route::put('/schools/{school}/students/{student}', [StudentController::class, 'update'])->name('students.update');
 });
 
-// Parent Portal Routes (for parents to view their children's results)
-Route::middleware(['auth', 'role:parent'])->prefix('parent')->group(function () {
-    Route::get('/children', [ParentPortalController::class, 'children'])->name('parent.children');
-    Route::get('/children/{student}/results', [ParentPortalController::class, 'childResults'])->name('parent.child-results');
-    Route::get('/children/{student}/results/{examSeries}', [ParentPortalController::class, 'childTermResults'])->name('parent.child-term-results');
-    Route::get('/children/{student}/results/{examSeries}/download', [ParentPortalController::class, 'downloadChildResults'])->name('parent.child-results.download');
-});
-
-// API Routes for AJAX requests and mobile app
+/*
+|--------------------------------------------------------------------------
+| API Routes for AJAX requests and dynamic content loading
+|--------------------------------------------------------------------------
+*/
 Route::prefix('api/schools/{school}')->middleware(['auth:sanctum'])->group(function () {
     // Class and stream relationships
     Route::get('/classes/{class}/streams', function (School $school, SchoolClass $class) {
         return response()->json($class->streams()->with('students')->get());
     })->name('api.class.streams');
     
-    // Subject information
-    Route::get('/subjects/{subject}/papers', function (School $school, Subject $subject) {
-        return response()->json($subject->examPapers ?? []);
-    })->name('api.subject.papers');
+    // Subject information for dynamic paper configuration
+    Route::get('/subjects/{subject}/default-papers', function (School $school, Subject $subject) {
+        // Return suggested paper configuration based on subject
+        $defaultConfigs = [
+            'english' => [
+                ['name' => 'Paper 1 - Functional Skills', 'marks' => 100, 'duration_minutes' => 150, 'weight' => 30, 'pass_mark' => 40],
+                ['name' => 'Paper 2 - Literature', 'marks' => 100, 'duration_minutes' => 150, 'weight' => 30, 'pass_mark' => 40],
+                ['name' => 'Paper 3 - Creative Composition', 'marks' => 100, 'duration_minutes' => 150, 'weight' => 40, 'pass_mark' => 40],
+            ],
+            'mathematics' => [
+                ['name' => 'Paper 1', 'marks' => 100, 'duration_minutes' => 150, 'weight' => 50, 'pass_mark' => 40],
+                ['name' => 'Paper 2', 'marks' => 100, 'duration_minutes' => 150, 'weight' => 50, 'pass_mark' => 40],
+            ],
+            'science' => [
+                ['name' => 'Paper 1 - Theory', 'marks' => 80, 'duration_minutes' => 120, 'weight' => 60, 'pass_mark' => 32],
+                ['name' => 'Paper 2 - Theory', 'marks' => 80, 'duration_minutes' => 120, 'weight' => 25, 'pass_mark' => 32],
+                ['name' => 'Paper 3 - Practical', 'marks' => 40, 'duration_minutes' => 90, 'weight' => 15, 'pass_mark' => 16],
+            ],
+            'physics' => [
+                ['name' => 'Paper 1 - Theory', 'marks' => 80, 'duration_minutes' => 120, 'weight' => 60, 'pass_mark' => 32],
+                ['name' => 'Paper 2 - Theory', 'marks' => 80, 'duration_minutes' => 120, 'weight' => 25, 'pass_mark' => 32],
+                ['name' => 'Paper 3 - Practical', 'marks' => 40, 'duration_minutes' => 90, 'weight' => 15, 'pass_mark' => 16],
+            ],
+            'chemistry' => [
+                ['name' => 'Paper 1 - Theory', 'marks' => 80, 'duration_minutes' => 120, 'weight' => 60, 'pass_mark' => 32],
+                ['name' => 'Paper 2 - Theory', 'marks' => 80, 'duration_minutes' => 120, 'weight' => 25, 'pass_mark' => 32],
+                ['name' => 'Paper 3 - Practical', 'marks' => 40, 'duration_minutes' => 90, 'weight' => 15, 'pass_mark' => 16],
+            ],
+            'biology' => [
+                ['name' => 'Paper 1 - Theory', 'marks' => 80, 'duration_minutes' => 120, 'weight' => 60, 'pass_mark' => 32],
+                ['name' => 'Paper 2 - Theory', 'marks' => 80, 'duration_minutes' => 120, 'weight' => 25, 'pass_mark' => 32],
+                ['name' => 'Paper 3 - Practical', 'marks' => 40, 'duration_minutes' => 90, 'weight' => 15, 'pass_mark' => 16],
+            ],
+        ];
+        
+        $subjectKey = strtolower(str_replace(' ', '', $subject->name));
+        $config = $defaultConfigs[$subjectKey] ?? [
+            ['name' => 'Paper 1', 'marks' => 100, 'duration_minutes' => 120, 'weight' => 100, 'pass_mark' => 40]
+        ];
+        
+        return response()->json($config);
+    })->name('api.subject.default-papers');
     
     // Grading system grades
     Route::get('/grading-systems/{gradingSystem}/grades', function (School $school, GradingSystem $gradingSystem) {
@@ -368,37 +407,51 @@ Route::prefix('api/schools/{school}')->middleware(['auth:sanctum'])->group(funct
     // Real-time exam statistics
     Route::get('/exams/{exam}/live-stats', [ExamController::class, 'getLiveStatistics'])->name('api.exam.live-stats');
     
+    // Subject paper statistics
+    Route::get('/exams/{exam}/subjects/{subject}/papers/{paper}/stats', function (School $school, Exam $exam, Subject $subject, ExamPaper $paper) {
+        return response()->json($paper->getStatistics());
+    })->name('api.paper.stats');
+    
     // Result validation
     Route::post('/results/validate', [ExamResultController::class, 'validateResults'])->name('api.results.validate');
 });
 
-// Webhook routes for external integrations (if needed)
-Route::prefix('webhooks')->group(function () {
-    Route::post('/exam-results-notification', [WebhookController::class, 'examResultsNotification'])->name('webhooks.exam-results');
-    Route::post('/term-report-ready', [WebhookController::class, 'termReportReady'])->name('webhooks.term-report');
+/*
+|--------------------------------------------------------------------------
+| Simplified authorization helper routes
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['auth'])->group(function () {
+    // Check if user can manage specific exam
+    Route::get('/api/can-manage-exam/{exam}', function (Exam $exam) {
+        $user = auth()->user();
+        
+        return response()->json([
+            'can_manage' => $user->hasRole('school_admin') || 
+                          $exam->getSubjectsForTeacher($user->id)->isNotEmpty(),
+            'subjects' => $user->hasRole('school_admin') ? 
+                        $exam->subjects->pluck('id') : 
+                        $exam->getSubjectsForTeacher($user->id)->pluck('id'),
+        ]);
+    })->name('api.exam.permissions');
+    
+    // Get teacher's assigned subjects for exam result entry
+    Route::get('/api/teacher-subjects/{exam}', function (Exam $exam) {
+        $user = auth()->user();
+        
+        if ($user->hasRole('school_admin')) {
+            return response()->json($exam->subjects);
+        }
+        
+        return response()->json($exam->getSubjectsForTeacher($user->id));
+    })->name('api.teacher.exam-subjects');
 });
-
-// Public routes for result verification (with authentication tokens)
-Route::prefix('public')->group(function () {
-    Route::get('/results/verify/{token}', [PublicResultController::class, 'verify'])->name('public.results.verify');
-    Route::get('/transcripts/{token}', [PublicResultController::class, 'transcript'])->name('public.transcript');
-});
-
 
 /*
 |--------------------------------------------------------------------------
-| HOD Dashboard & Routes
+| Authentication Routes
 |--------------------------------------------------------------------------
 */
-Route::middleware(['auth', 'role:hod'])->group(function () {
-    Route::get('/schools/{school}/students/create', [StudentController::class, 'create'])->name('students.create');
-    Route::post('/schools/{school}/students', [StudentController::class, 'store'])->name('students.store');
-    Route::get('/schools/{school}/students', [StudentController::class, 'index'])->name('students.index');
-    Route::get('/schools/{school}/students/{student}/edit', [StudentController::class, 'edit'])->name('students.edit');
-    Route::put('/schools/{school}/students/{student}', [StudentController::class, 'update'])->name('students.update');
-});
-
-
 Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])
     ->middleware('auth')
     ->name('logout');
@@ -406,5 +459,6 @@ Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])
 Route::get('/login', [AuthenticatedSessionController::class, 'create'])
     ->middleware('guest')
     ->name('login');
+    
 Route::post('/login', [AuthenticatedSessionController::class, 'store'])
     ->middleware('guest');

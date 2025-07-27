@@ -83,10 +83,8 @@ class ExamController extends Controller
             'grading_system_id' => 'required|exists:grading_systems,id',
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'date' => 'required|date',
-            'start_time' => 'required|date_format:H:i',
-            'end_time' => 'required|date_format:H:i|after:start_time',
-            'duration_minutes' => 'required|integer|min:1',
+            'start_date' => 'required|date',
+            'end_date' => 'required|date|after_or_equal:start_date',
             'instructions' => 'nullable|string',
             'scope_type' => 'required|in:all_school,selected_classes,single_class',
             'subject_scope_type' => 'required|in:all_subjects,selected_subjects,single_subject',
@@ -101,7 +99,13 @@ class ExamController extends Controller
             'subject_settings.*.total_marks' => 'required|integer|min:1',
             'subject_settings.*.pass_mark' => 'required|integer|min:0',
             'subject_settings.*.has_papers' => 'boolean',
+            'subject_settings.*.paper_count' => 'required_if:subject_settings.*.has_papers,true|integer|min:1|max:5',
             'subject_settings.*.papers' => 'required_if:subject_settings.*.has_papers,true|array',
+            'subject_settings.*.papers.*.name' => 'required|string|max:255',
+            'subject_settings.*.papers.*.marks' => 'required|integer|min:1',
+            'subject_settings.*.papers.*.pass_mark' => 'required|integer|min:0',
+            'subject_settings.*.papers.*.duration_minutes' => 'required|integer|min:30',
+            'subject_settings.*.papers.*.weight' => 'required|numeric|min:0|max:100',
         ]);
 
         DB::transaction(function () use ($request, $school) {
@@ -112,10 +116,8 @@ class ExamController extends Controller
                 'grading_system_id' => $request->grading_system_id,
                 'name' => $request->name,
                 'description' => $request->description,
-                'date' => $request->date,
-                'start_time' => $request->start_time,
-                'end_time' => $request->end_time,
-                'duration_minutes' => $request->duration_minutes,
+                'start_date' => $request->start_date,
+                'end_date' => $request->end_date,
                 'instructions' => $request->instructions,
                 'scope_type' => $request->scope_type,
                 'subject_scope_type' => $request->subject_scope_type,
@@ -166,7 +168,7 @@ class ExamController extends Controller
                     'total_marks' => $subjectSetting['total_marks'],
                     'pass_mark' => $subjectSetting['pass_mark'],
                     'has_papers' => $subjectSetting['has_papers'] ?? false,
-                    'paper_breakdown' => json_encode($subjectSetting['papers'] ?? []),
+                    'paper_count' => $subjectSetting['paper_count'] ?? 1,
                 ];
             }
         }
@@ -192,18 +194,18 @@ class ExamController extends Controller
     {
         foreach ($request->subject_settings as $subjectSetting) {
             if ($subjectSetting['has_papers'] && isset($subjectSetting['papers'])) {
-                foreach ($subjectSetting['papers'] as $paper) {
+                foreach ($subjectSetting['papers'] as $index => $paper) {
                     ExamPaper::create([
                         'exam_id' => $exam->id,
                         'subject_id' => $subjectSetting['subject_id'],
-                        'paper_number' => $paper['number'],
+                        'paper_number' => $index + 1,
                         'paper_name' => $paper['name'],
                         'total_marks' => $paper['marks'],
-                        'pass_mark' => $paper['pass_mark'] ?? 40,
-                        'duration_minutes' => $paper['duration'] ?? 120,
+                        'pass_mark' => $paper['pass_mark'],
+                        'duration_minutes' => $paper['duration_minutes'],
                         'percentage_weight' => $paper['weight'],
                         'instructions' => $paper['instructions'] ?? null,
-                        'is_practical' => $paper['is_practical'] ?? false,
+                        'is_practical' => str_contains(strtolower($paper['name']), 'practical'),
                     ]);
                 }
             }
