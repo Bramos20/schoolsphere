@@ -73,6 +73,206 @@ class ExamController extends Controller
         ]);
     }
 
+    public function edit(School $school, Exam $exam)
+    {
+        $this->authorize('update', $exam);
+
+        $exam->load([
+            'classes', 
+            'subjects.department', 
+            'examSeries', 
+            'examCategory', 
+            'gradingSystem',
+            'examPapers'
+        ]);
+
+        $classes = $school->classes()->with('streams')->get();
+        $subjects = $school->subjects()->with('department')->get();
+        $examSeries = $school->examSeries()->where('is_active', true)->get();
+        $categories = $school->examCategories()->where('is_active', true)->get();
+        $gradingSystems = $school->gradingSystems()->where('is_active', true)->get();
+
+        // Prepare exam data for frontend
+        $examData = [
+            'id' => $exam->id,
+            'name' => $exam->name,
+            'description' => $exam->description,
+            'exam_series_id' => $exam->exam_series_id,
+            'exam_category_id' => $exam->exam_category_id,
+            'grading_system_id' => $exam->grading_system_id,
+            'start_date' => $exam->start_date->format('Y-m-d'),
+            'end_date' => $exam->end_date->format('Y-m-d'),
+            'instructions' => $exam->instructions,
+            'scope_type' => $exam->scope_type,
+            'subject_scope_type' => $exam->subject_scope_type,
+            'exam_status' => $exam->exam_status,
+            'selected_classes' => $exam->classes->pluck('id')->toArray(),
+            'selected_subjects' => $exam->subjects->pluck('id')->toArray(),
+            'single_class_id' => $exam->scope_type === 'single_class' ? $exam->classes->first()?->id : null,
+            'single_subject_id' => $exam->subject_scope_type === 'single_subject' ? $exam->subjects->first()?->id : null,
+        ];
+
+        // Prepare subject settings
+        $subjectSettings = [];
+        foreach ($exam->subjects as $subject) {
+            $papers = $exam->examPapers->where('subject_id', $subject->id)->values();
+            
+            $subjectSettings[] = [
+                'subject_id' => $subject->id,
+                'total_marks' => $subject->pivot->total_marks,
+                'pass_mark' => $subject->pivot->pass_mark,
+                'has_papers' => $subject->pivot->has_papers,
+                'paper_count' => $subject->pivot->paper_count,
+                'papers' => $papers->map(function($paper) {
+                    return [
+                        'id' => $paper->id,
+                        'name' => $paper->paper_name,
+                        'marks' => $paper->total_marks,
+                        'pass_mark' => $paper->pass_mark,
+                        'duration_minutes' => $paper->duration_minutes,
+                        'weight' => $paper->percentage_weight,
+                        'instructions' => $paper->instructions,
+                    ];
+                })->toArray()
+            ];
+        }
+
+        $examData['subject_settings'] = $subjectSettings;
+
+        return Inertia::render('SchoolAdmin/Exams/Edit', [
+            'school' => $school,
+            'exam' => $examData,
+            'classes' => $classes,
+            'subjects' => $subjects,
+            'examSeries' => $examSeries,
+            'categories' => $categories,
+            'gradingSystems' => $gradingSystems,
+        ]);
+    }
+
+    public function update(Request $request, School $school, Exam $exam)
+    {
+        $this->authorize('update', $exam);
+
+        \Log::info('ExamController@update method called.');
+        \Log::info('Request data:', $request->all());
+
+        // Build validation rules dynamically based on scope types
+        $rules = [
+            'exam_series_id' => 'required|exists:exam_series,id',
+            'exam_category_id' => 'required|exists:exam_categories,id',
+            'grading_system_id' => 'required|exists:grading_systems,id',
+            'name' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'start_date' => 'required|date',
+            'end_date' => 'required|date|after_or_equal:start_date',
+            'instructions' => 'nullable|string',
+            'scope_type' => 'required|in:all_school,selected_classes,single_class',
+            'subject_scope_type' => 'required|in:all_subjects,selected_subjects,single_subject',
+            'exam_status' => 'required|in:draft,active,completed,published',
+        ];
+
+        // Add conditional rules based on scope_type
+        if ($request->scope_type === 'selected_classes') {
+            $rules['selected_classes'] = 'required|array|min:1';
+            $rules['selected_classes.*'] = 'exists:school_classes,id';
+        } elseif ($request->scope_type === 'single_class') {
+            $rules['single_class_id'] = 'required|exists:school_classes,id';
+        }
+
+        // Add conditional rules based on subject_scope_type
+        if ($request->subject_scope_type === 'selected_subjects') {
+            $rules['selected_subjects'] = 'required|array|min:1';
+            $rules['selected_subjects.*'] = 'exists:subjects,id';
+        } elseif ($request->subject_scope_type === 'single_subject') {
+            $rules['single_subject_id'] = 'required|exists:subjects,id';
+        }
+
+        // Subject settings validation - always required but content varies
+        $rules['subject_settings'] = 'required|array|min:1';
+        $rules['subject_settings.*.subject_id'] = 'required|exists:subjects,id';
+        $rules['subject_settings.*.total_marks'] = 'required|integer|min:1';
+        $rules['subject_settings.*.pass_mark'] = 'required|integer|min:0';
+        $rules['subject_settings.*.has_papers'] = 'boolean';
+        $rules['subject_settings.*.paper_count'] = 'nullable|integer|min:1|max:5';
+        $rules['subject_settings.*.papers'] = 'nullable|array';
+        $rules['subject_settings.*.papers.*.name'] = 'required_if:subject_settings.*.has_papers,true|string|max:255';
+        $rules['subject_settings.*.papers.*.marks'] = 'required_if:subject_settings.*.has_papers,true|integer|min:1';
+        $rules['subject_settings.*.papers.*.pass_mark'] = 'required_if:subject_settings.*.has_papers,true|integer|min:0';
+        $rules['subject_settings.*.papers.*.duration_minutes'] = 'required_if:subject_settings.*.has_papers,true|integer|min:30';
+        $rules['subject_settings.*.papers.*.weight'] = 'required_if:subject_settings.*.has_papers,true|numeric|min:0|max:100';
+
+        try {
+            $validatedData = $request->validate($rules);
+            \Log::info('Validation passed. Validated data:', $validatedData);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            \Log::error('Validation failed:', $e->errors());
+            return back()->withErrors($e->errors())->withInput();
+        }
+
+        try {
+            DB::transaction(function () use ($validatedData, $school, $exam, $request) {
+                // Update exam basic information
+                $exam->update([
+                    'exam_series_id' => $validatedData['exam_series_id'],
+                    'exam_category_id' => $validatedData['exam_category_id'],
+                    'grading_system_id' => $validatedData['grading_system_id'],
+                    'name' => $validatedData['name'],
+                    'description' => $validatedData['description'] ?? null,
+                    'start_date' => $validatedData['start_date'],
+                    'end_date' => $validatedData['end_date'],
+                    'instructions' => $validatedData['instructions'] ?? null,
+                    'scope_type' => $validatedData['scope_type'],
+                    'subject_scope_type' => $validatedData['subject_scope_type'],
+                    'exam_status' => $validatedData['exam_status'],
+                ]);
+
+                \Log::info('Exam updated with ID: ' . $exam->id);
+
+                // Update classes - detach all and reattach
+                $exam->classes()->detach();
+                $classIds = $this->getClassIds($validatedData, $school);
+                if (!empty($classIds)) {
+                    $exam->classes()->attach($classIds);
+                    \Log::info('Classes updated: ', $classIds);
+                }
+
+                // Update subjects with settings - detach all and reattach
+                $exam->subjects()->detach();
+                $this->attachSubjectsWithSettings($exam, $validatedData, $school);
+
+                // Update exam papers - delete existing and recreate
+                $exam->examPapers()->delete();
+                $this->createExamPapers($exam, $validatedData);
+                
+                \Log::info('Exam update completed successfully');
+            });
+
+            $message = 'Exam updated successfully.';
+            
+            // Add specific message based on status change
+            if ($request->exam_status === 'active') {
+                $message .= ' Exam is now active and results can be entered.';
+            } elseif ($request->exam_status === 'completed') {
+                $message .= ' Exam marked as completed.';
+            } elseif ($request->exam_status === 'published') {
+                $message .= ' Exam results are now published and visible to students.';
+            }
+
+            return redirect()->route('exams.show', [$school, $exam])
+                ->with('success', $message);
+                
+        } catch (\Exception $e) {
+            \Log::error('Error updating exam: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
+            
+            return back()
+                ->withErrors(['error' => 'An error occurred while updating the exam: ' . $e->getMessage()])
+                ->withInput();
+        }
+    }
+
     public function store(Request $request, School $school)
     {
         \Log::info('ExamController@store method called.');
@@ -313,9 +513,15 @@ class ExamController extends Controller
     {
         $user = auth()->user();
         
-        // Authorization check
+        // Authorization check - updated to allow active and completed exams
         if (!$user->hasRole('school_admin') && !$exam->canTeacherEnterResults($user->id, $subject->id)) {
             abort(403, 'You are not authorized to enter results for this subject.');
+        }
+
+        // Check if exam allows result entry
+        if (!in_array($exam->exam_status, ['active', 'completed'])) {
+            return redirect()->route('exams.show', [$school, $exam])
+                ->withErrors(['error' => 'Results can only be entered for active or completed exams. Current status: ' . $exam->exam_status]);
         }
 
         // Get students eligible for this exam

@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link, router } from '@inertiajs/react';
-import { Plus, Search, Filter, Calendar, BookOpen, Users, Award, Eye, Edit, Trash2, FileText, Upload, Clock, TrendingUp, AlertCircle, CheckCircle } from 'lucide-react';
+import { Plus, Search, Filter, Calendar, BookOpen, Users, Award, Eye, Edit, Trash2, FileText, Upload, Clock, TrendingUp, AlertCircle, CheckCircle, Play, Square, BarChart3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Progress } from '@/components/ui/progress';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export default function ExamsIndex({ school, exams, examSeries, categories, userRole }) {
     const [searchTerm, setSearchTerm] = useState('');
@@ -31,6 +32,26 @@ export default function ExamsIndex({ school, exams, examSeries, categories, user
     const handleDelete = (examId) => {
         if (confirm('Are you sure you want to delete this exam? This action cannot be undone.')) {
             router.delete(route('exams.destroy', [school.id, examId]));
+        }
+    };
+
+    const handleStatusChange = (exam, newStatus) => {
+        const confirmMessages = {
+            'active': 'Are you sure you want to activate this exam? Teachers will be able to enter results.',
+            'completed': 'Are you sure you want to mark this exam as completed?',
+            'published': 'Are you sure you want to publish the results? Students will be able to view their results.',
+        };
+
+        if (confirm(confirmMessages[newStatus] || 'Are you sure you want to change the exam status?')) {
+            router.put(route('exams.update', [school.id, exam.id]), {
+                ...exam,
+                exam_status: newStatus
+            }, {
+                preserveScroll: true,
+                onSuccess: () => {
+                    // Optionally show a success message
+                }
+            });
         }
     };
 
@@ -80,6 +101,27 @@ export default function ExamsIndex({ school, exams, examSeries, categories, user
                            `${exam.subjects?.length || 0} Subjects`;
 
         return `${classText} • ${subjectText}`;
+    };
+
+    const getAvailableStatusActions = (exam) => {
+        const actions = [];
+        
+        if (exam.exam_status === 'draft') {
+            actions.push({ status: 'active', label: 'Activate Exam', icon: Play, color: 'text-blue-600' });
+        } else if (exam.exam_status === 'active') {
+            actions.push({ status: 'completed', label: 'Mark Completed', icon: Square, color: 'text-yellow-600' });
+        } else if (exam.exam_status === 'completed') {
+            actions.push({ status: 'published', label: 'Publish Results', icon: CheckCircle, color: 'text-green-600' });
+        }
+        
+        return actions;
+    };
+
+    const canEnterResults = (exam) => {
+        if (userRole === 'school_admin') {
+            return ['draft', 'active', 'completed'].includes(exam.exam_status);
+        }
+        return ['active', 'completed'].includes(exam.exam_status);
     };
 
     const totalExams = exams.length;
@@ -271,7 +313,7 @@ export default function ExamsIndex({ school, exams, examSeries, categories, user
                                                     </svg>
                                                 </Button>
                                             </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end">
+                                            <DropdownMenuContent align="end" className="w-56">
                                                 <DropdownMenuItem asChild>
                                                     <Link href={route('exams.show', [school.id, exam.id])}>
                                                         <Eye className="mr-2 h-4 w-4" />
@@ -285,6 +327,29 @@ export default function ExamsIndex({ school, exams, examSeries, categories, user
                                                             <Link href={route('exams.edit', [school.id, exam.id])}>
                                                                 <Edit className="mr-2 h-4 w-4" />
                                                                 Edit Exam
+                                                            </Link>
+                                                        </DropdownMenuItem>
+
+                                                        <DropdownMenuSeparator />
+
+                                                        {/* Status Actions */}
+                                                        {getAvailableStatusActions(exam).map(action => (
+                                                            <DropdownMenuItem 
+                                                                key={action.status}
+                                                                onClick={() => handleStatusChange(exam, action.status)}
+                                                                className={action.color}
+                                                            >
+                                                                <action.icon className="mr-2 h-4 w-4" />
+                                                                {action.label}
+                                                            </DropdownMenuItem>
+                                                        ))}
+
+                                                        <DropdownMenuSeparator />
+
+                                                        <DropdownMenuItem asChild>
+                                                            <Link href={route('exams.statistics', [school.id, exam.id])}>
+                                                                <BarChart3 className="mr-2 h-4 w-4" />
+                                                                View Statistics
                                                             </Link>
                                                         </DropdownMenuItem>
 
@@ -303,13 +368,16 @@ export default function ExamsIndex({ school, exams, examSeries, categories, user
                                                         </DropdownMenuItem>
 
                                                         {exam.exam_status === 'draft' && (
-                                                            <DropdownMenuItem
-                                                                onClick={() => handleDelete(exam.id)}
-                                                                className="text-red-600"
-                                                            >
-                                                                <Trash2 className="mr-2 h-4 w-4" />
-                                                                Delete
-                                                            </DropdownMenuItem>
+                                                            <>
+                                                                <DropdownMenuSeparator />
+                                                                <DropdownMenuItem
+                                                                    onClick={() => handleDelete(exam.id)}
+                                                                    className="text-red-600"
+                                                                >
+                                                                    <Trash2 className="mr-2 h-4 w-4" />
+                                                                    Delete
+                                                                </DropdownMenuItem>
+                                                            </>
                                                         )}
                                                     </>
                                                 )}
@@ -318,40 +386,6 @@ export default function ExamsIndex({ school, exams, examSeries, categories, user
                                     </div>
 
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                        <div>
-                                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Series & Category</p>
-                                            <div className="mt-1 space-y-1">
-                                                <Badge variant="outline" className="text-xs">
-                                                    {exam.exam_series?.name || 'No Series'}
-                                                </Badge>
-                                                {exam.exam_category && (
-                                                    <Badge
-                                                        variant="outline"
-                                                        className="text-xs"
-                                                        style={{
-                                                            backgroundColor: exam.exam_category.color + '20',
-                                                            borderColor: exam.exam_category.color,
-                                                            color: exam.exam_category.color
-                                                        }}
-                                                    >
-                                                        {exam.exam_category.name}
-                                                    </Badge>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        <div>
-                                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Exam Period</p>
-                                            <div className="mt-1">
-                                                <p className="font-medium text-sm">
-                                                    {formatDate(exam.start_date)} - {formatDate(exam.end_date)}
-                                                </p>
-                                                <p className="text-xs text-muted-foreground">
-                                                    {exam.grading_system?.name || 'No Grading System'}
-                                                </p>
-                                            </div>
-                                        </div>
-
                                         <div>
                                             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Scope</p>
                                             <div className="mt-1">
@@ -383,6 +417,65 @@ export default function ExamsIndex({ school, exams, examSeries, categories, user
                                             </div>
                                         </div>
                                     </div>
+
+                                    {/* Quick Actions for Results Entry */}
+                                    {canEnterResults(exam) && exam.subjects?.length > 0 && (
+                                        <div className="mt-4 pt-4 border-t">
+                                            <div className="flex items-center justify-between">
+                                                <p className="text-sm font-medium text-muted-foreground">
+                                                    Quick Actions:
+                                                </p>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {exam.subjects?.slice(0, 4).map(subject => (
+                                                        <Link 
+                                                            key={subject.id}
+                                                            href={route('exams.enter-results', [school.id, exam.id, subject.id])}
+                                                        >
+                                                            <Button variant="outline" size="sm" className="text-xs">
+                                                                Enter {subject.name} Results
+                                                            </Button>
+                                                        </Link>
+                                                    ))}
+                                                    {exam.subjects?.length > 4 && (
+                                                        <Link href={route('exams.show', [school.id, exam.id])}>
+                                                            <Button variant="outline" size="sm" className="text-xs">
+                                                                +{exam.subjects.length - 4} more subjects
+                                                            </Button>
+                                                        </Link>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Status-specific alerts */}
+                                    {exam.exam_status === 'draft' && userRole === 'school_admin' && (
+                                        <div className="mt-4 pt-4 border-t">
+                                            <Alert>
+                                                <AlertCircle className="h-4 w-4" />
+                                                <AlertDescription>
+                                                    This exam is in draft mode. 
+                                                    <Link 
+                                                        href={route('exams.edit', [school.id, exam.id])}
+                                                        className="ml-1 underline text-blue-600 hover:text-blue-800"
+                                                    >
+                                                        Activate it
+                                                    </Link> to allow result entry.
+                                                </AlertDescription>
+                                            </Alert>
+                                        </div>
+                                    )}
+
+                                    {exam.exam_status === 'completed' && userRole === 'school_admin' && (
+                                        <div className="mt-4 pt-4 border-t">
+                                            <Alert>
+                                                <CheckCircle className="h-4 w-4" />
+                                                <AlertDescription>
+                                                    Exam completed! Ready to publish results when finalized.
+                                                </AlertDescription>
+                                            </Alert>
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -414,4 +507,4 @@ export default function ExamsIndex({ school, exams, examSeries, categories, user
             </div>
         </AppLayout>
     );
-}
+} 

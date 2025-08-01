@@ -55,10 +55,16 @@ class ExamPolicy
      */
     public function update(User $user, Exam $exam)
     {
-        return $user->hasRole('school_admin') && 
-               $user->school_id === $exam->school_id &&
-               !$exam->is_published &&
-               in_array($exam->exam_status, ['draft', 'active']);
+        // School admin can update exams that are not published
+        if ($user->hasRole('school_admin') && $user->school_id === $exam->school_id) {
+            // Allow updates unless exam is published and has results
+            if ($exam->is_published && $exam->results()->count() > 0) {
+                return false; // Cannot update published exams with results
+            }
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -75,24 +81,35 @@ class ExamPolicy
 
     /**
      * Determine whether the user can enter results for an exam.
+     * Updated to allow result entry for active, completed, and even draft exams for school admins
      */
-    public function enterResults(User $user, Exam $exam, Subject $subject)
+    public function enterResults(User $user, Exam $exam, Subject $subject = null)
     {
-        // Check if exam is in a state that allows result entry
-        if (!in_array($exam->exam_status, ['active', 'completed'])) {
-            return false;
-        }
-
-        // School admin can enter results for any subject
+        // School admin can enter results for any exam status except published (with restrictions)
         if ($user->hasRole('school_admin') && $user->school_id === $exam->school_id) {
-            return true;
+            // Allow for draft, active, and completed exams
+            if (in_array($exam->exam_status, ['draft', 'active', 'completed'])) {
+                return true;
+            }
+            
+            // For published exams, allow only if explicitly needed (e.g., corrections)
+            if ($exam->exam_status === 'published') {
+                return false; // Generally don't allow editing published results
+            }
         }
 
-        // Teachers can only enter results for subjects they teach
-        if ($user->hasRole('teacher')) {
-            return SubjectTeacherStream::where('teacher_id', $user->id)
-                ->where('subject_id', $subject->id)
-                ->exists();
+        // Teachers can enter results for active and completed exams for subjects they teach
+        if ($user->hasRole('teacher') && in_array($exam->exam_status, ['active', 'completed'])) {
+            if ($subject) {
+                return SubjectTeacherStream::where('teacher_id', $user->id)
+                    ->where('subject_id', $subject->id)
+                    ->exists();
+            }
+            
+            // If no specific subject provided, check if teacher teaches any subject in the exam
+            return $exam->subjects()->whereHas('streamAssignments', function ($query) use ($user) {
+                $query->where('teacher_id', $user->id);
+            })->exists();
         }
 
         return false;
@@ -105,7 +122,7 @@ class ExamPolicy
     {
         return $user->hasRole('school_admin') && 
                $user->school_id === $exam->school_id &&
-               $exam->exam_status !== 'draft';
+               in_array($exam->exam_status, ['active', 'completed']); // Can publish active or completed exams
     }
 
     /**
@@ -139,7 +156,7 @@ class ExamPolicy
     {
         return $user->hasRole('school_admin') && 
                $user->school_id === $exam->school_id &&
-               $exam->exam_status === 'draft';
+               in_array($exam->exam_status, ['draft', 'active']); // Allow managing papers for draft and active exams
     }
 
     /**
@@ -201,9 +218,60 @@ class ExamPolicy
             return false;
         }
 
-        // Check if exam is in correct status and within date range
-        return in_array($exam->exam_status, ['active', 'completed']) &&
-               now()->toDateString() >= $exam->start_date &&
-               now()->toDateString() <= $exam->end_date->addDays(30); // Allow 30 days after exam end for result entry
+        // School admin has more flexibility
+        if ($user->hasRole('school_admin') && $user->school_id === $exam->school_id) {
+            return in_array($exam->exam_status, ['draft', 'active', 'completed']);
+        }
+
+        // Teachers need exam to be active or completed and within reasonable date range
+        if ($user->hasRole('teacher')) {
+            return in_array($exam->exam_status, ['active', 'completed']) &&
+                   now()->toDateString() >= $exam->start_date &&
+                   now()->toDateString() <= $exam->end_date->addDays(30); // Allow 30 days after exam end
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if user can change exam status
+     */
+    public function changeStatus(User $user, Exam $exam)
+    {
+        if (!$user->hasRole('school_admin') || $user->school_id !== $exam->school_id) {
+            return false;
+        }
+
+        // Define allowed status transitions
+        $allowedTransitions = [
+            'draft' => ['active'],
+            'active' => ['completed', 'draft'], // Allow going back to draft if needed
+            'completed' => ['published', 'active'], // Allow going back to active for corrections
+            'published' => [] // Generally don't allow changing from published
+        ];
+
+        return isset($allowedTransitions[$exam->exam_status]);
+    }
+
+    /**
+     * Check if user can activate exam (change from draft to active)
+     */
+    public function activate(User $user, Exam $exam)
+    {
+        return $user->hasRole('school_admin') && 
+               $user->school_id === $exam->school_id &&
+               $exam->exam_status === 'draft' &&
+               $exam->subjects()->count() > 0 && // Must have subjects
+               $exam->classes()->count() > 0;    // Must have classes
+    }
+
+    /**
+     * Check if user can complete exam (change from active to completed)
+     */
+    public function complete(User $user, Exam $exam)
+    {
+        return $user->hasRole('school_admin') && 
+               $user->school_id === $exam->school_id &&
+               $exam->exam_status === 'active';
     }
 }
