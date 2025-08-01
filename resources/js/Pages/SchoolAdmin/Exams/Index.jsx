@@ -16,9 +16,10 @@ export default function ExamsIndex({ school, exams, examSeries, categories }) {
     const [selectedCategory, setSelectedCategory] = useState('');
 
     const filteredExams = exams.filter(exam => {
-        const matchesSearch = exam.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            exam.subject.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            exam.class.name.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesSearch =
+            (exam.name && exam.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+            (exam.subjects && exam.subjects.some(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()))) ||
+            (exam.classes && exam.classes.some(c => c.name.toLowerCase().includes(searchTerm.toLowerCase())));
         const matchesSeries = !selectedSeries || exam.exam_series_id.toString() === selectedSeries;
         const matchesCategory = !selectedCategory || exam.exam_category_id.toString() === selectedCategory;
         
@@ -222,14 +223,13 @@ export default function ExamsIndex({ school, exams, examSeries, categories }) {
                                                 </div>
 
                                                 <div>
-                                                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Class & Subject</p>
+                                                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Scope</p>
                                                     <div className="mt-1">
                                                         <p className="font-medium">
-                                                            {exam.class.name}
-                                                            {exam.stream && ` - ${exam.stream.name}`}
+                                                            Classes: {exam.classes && exam.classes.length > 0 ? exam.classes.map(c => c.name).join(', ') : 'N/A'}
                                                         </p>
                                                         <p className="text-sm text-muted-foreground">
-                                                            {exam.subject.name}
+                                                            Subjects: {exam.subjects && exam.subjects.length > 0 ? exam.subjects.map(s => s.name).join(', ') : 'N/A'}
                                                         </p>
                                                     </div>
                                                 </div>

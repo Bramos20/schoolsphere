@@ -316,11 +316,14 @@ export default function CreateExam({ school, classes, subjects, examSeries, cate
         console.log('- full data:', finalData);
         console.log('=== FORM SUBMISSION END ===');
         
-        // Use the useForm post method instead of router.post for better error handling
-        post(route('exams.store', { school: school.id }), {
-            data: finalData,
+        router.post(route('exams.store', { school: school.id }), finalData, {
+            onStart: () => setSubmitting(true),
+            onFinish: () => setSubmitting(false),
             onError: (errors) => {
                 console.error('❌ Submission errors:', errors);
+                Object.keys(errors).forEach(key => {
+                    setError(key, errors[key]);
+                });
                 // Scroll to first error
                 const firstErrorElement = document.querySelector('.text-red-500');
                 if (firstErrorElement) {
@@ -791,9 +794,9 @@ export default function CreateExam({ school, classes, subjects, examSeries, cate
                                 </CardContent>
                             </Card>
 
-                            <Button type="submit" disabled={processing} className="w-full">
+                            <Button type="submit" disabled={submitting} className="w-full">
                                 <Save className="h-4 w-4 mr-2" />
-                                {processing ? 'Creating...' : 'Create Exam'}
+                                {submitting ? 'Creating...' : 'Create Exam'}
                             </Button>
 
                             {/* Additional validation messages */}
