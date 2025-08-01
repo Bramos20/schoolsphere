@@ -76,11 +76,12 @@ class ExamController extends Controller
     public function store(Request $request, School $school)
     {
         \Log::info('ExamController@store method called.');
-        \Log::info($request->all());
+        \Log::info('Request data:', $request->all());
 
         $this->authorize('create-exam', $school);
 
-        $request->validate([
+        // Build validation rules dynamically based on scope types
+        $rules = [
             'exam_series_id' => 'required|exists:exam_series,id',
             'exam_category_id' => 'required|exists:exam_categories,id',
             'grading_system_id' => 'required|exists:grading_systems,id',
@@ -91,79 +92,131 @@ class ExamController extends Controller
             'instructions' => 'nullable|string',
             'scope_type' => 'required|in:all_school,selected_classes,single_class',
             'subject_scope_type' => 'required|in:all_subjects,selected_subjects,single_subject',
-            'selected_classes' => 'required_if:scope_type,selected_classes|array',
-            'selected_classes.*' => 'exists:school_classes,id',
-            'single_class_id' => 'required_if:scope_type,single_class|exists:school_classes,id',
-            'selected_subjects' => 'required_if:subject_scope_type,selected_subjects|array',
-            'selected_subjects.*' => 'exists:subjects,id',
-            'single_subject_id' => 'required_if:subject_scope_type,single_subject|exists:subjects,id',
-            'subject_settings' => 'required|array',
-            'subject_settings.*.subject_id' => 'required|exists:subjects,id',
-            'subject_settings.*.total_marks' => 'required|integer|min:1',
-            'subject_settings.*.pass_mark' => 'required|integer|min:0',
-            'subject_settings.*.has_papers' => 'boolean',
-            'subject_settings.*.paper_count' => 'required_if:subject_settings.*.has_papers,true|integer|min:1|max:5',
-            'subject_settings.*.papers' => 'required_if:subject_settings.*.has_papers,true|array',
-            'subject_settings.*.papers.*.name' => 'required|string|max:255',
-            'subject_settings.*.papers.*.marks' => 'required|integer|min:1',
-            'subject_settings.*.papers.*.pass_mark' => 'required|integer|min:0',
-            'subject_settings.*.papers.*.duration_minutes' => 'required|integer|min:30',
-            'subject_settings.*.papers.*.weight' => 'required|numeric|min:0|max:100',
-        ]);
+        ];
 
-        DB::transaction(function () use ($request, $school) {
-            // Create exam
-            $exam = $school->exams()->create([
-                'exam_series_id' => $request->exam_series_id,
-                'exam_category_id' => $request->exam_category_id,
-                'grading_system_id' => $request->grading_system_id,
-                'name' => $request->name,
-                'description' => $request->description,
-                'start_date' => $request->start_date,
-                'end_date' => $request->end_date,
-                'instructions' => $request->instructions,
-                'scope_type' => $request->scope_type,
-                'subject_scope_type' => $request->subject_scope_type,
-                'exam_status' => 'draft',
-                'created_by' => auth()->id(),
-            ]);
+        // Add conditional rules based on scope_type
+        if ($request->scope_type === 'selected_classes') {
+            $rules['selected_classes'] = 'required|array|min:1';
+            $rules['selected_classes.*'] = 'exists:school_classes,id';
+        } elseif ($request->scope_type === 'single_class') {
+            $rules['single_class_id'] = 'required|exists:school_classes,id';
+        }
 
-            // Attach classes
-            $classIds = $this->getClassIds($request, $school);
-            $exam->classes()->attach($classIds);
+        // Add conditional rules based on subject_scope_type
+        if ($request->subject_scope_type === 'selected_subjects') {
+            $rules['selected_subjects'] = 'required|array|min:1';
+            $rules['selected_subjects.*'] = 'exists:subjects,id';
+        } elseif ($request->subject_scope_type === 'single_subject') {
+            $rules['single_subject_id'] = 'required|exists:subjects,id';
+        }
 
-            // Attach subjects with settings
-            $this->attachSubjectsWithSettings($exam, $request, $school);
+        // Subject settings validation - always required but content varies
+        $rules['subject_settings'] = 'required|array|min:1';
+        $rules['subject_settings.*.subject_id'] = 'required|exists:subjects,id';
+        $rules['subject_settings.*.total_marks'] = 'required|integer|min:1';
+        $rules['subject_settings.*.pass_mark'] = 'required|integer|min:0';
+        $rules['subject_settings.*.has_papers'] = 'boolean';
+        $rules['subject_settings.*.paper_count'] = 'nullable|integer|min:1|max:5';
+        $rules['subject_settings.*.papers'] = 'nullable|array';
+        $rules['subject_settings.*.papers.*.name'] = 'required_if:subject_settings.*.has_papers,true|string|max:255';
+        $rules['subject_settings.*.papers.*.marks'] = 'required_if:subject_settings.*.has_papers,true|integer|min:1';
+        $rules['subject_settings.*.papers.*.pass_mark'] = 'required_if:subject_settings.*.has_papers,true|integer|min:0';
+        $rules['subject_settings.*.papers.*.duration_minutes'] = 'required_if:subject_settings.*.has_papers,true|integer|min:30';
+        $rules['subject_settings.*.papers.*.weight'] = 'required_if:subject_settings.*.has_papers,true|numeric|min:0|max:100';
 
-            // Create exam papers for subjects that have them
-            $this->createExamPapers($exam, $request);
-        });
+        try {
+            $validatedData = $request->validate($rules);
+            \Log::info('Validation passed. Validated data:', $validatedData);
 
-        return redirect()->route('exams.index', $school)
-            ->with('success', 'Exam created successfully.');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            \Log::error('Validation failed:', $e->errors());
+            return back()->withErrors($e->errors())->withInput();
+        }
+
+        try {
+            DB::transaction(function () use ($validatedData, $school, $request) {
+                // Create exam
+                $exam = $school->exams()->create([
+                    'exam_series_id' => $validatedData['exam_series_id'],
+                    'exam_category_id' => $validatedData['exam_category_id'],
+                    'grading_system_id' => $validatedData['grading_system_id'],
+                    'name' => $validatedData['name'],
+                    'description' => $validatedData['description'] ?? null,
+                    'start_date' => $validatedData['start_date'],
+                    'end_date' => $validatedData['end_date'],
+                    'instructions' => $validatedData['instructions'] ?? null,
+                    'scope_type' => $validatedData['scope_type'],
+                    'subject_scope_type' => $validatedData['subject_scope_type'],
+                    'exam_status' => 'draft',
+                    'created_by' => auth()->id(),
+                ]);
+
+                \Log::info('Exam created with ID: ' . $exam->id);
+
+                // Attach classes
+                $classIds = $this->getClassIds($validatedData, $school);
+                if (!empty($classIds)) {
+                    $exam->classes()->attach($classIds);
+                    \Log::info('Classes attached: ', $classIds);
+                }
+
+                // Attach subjects with settings
+                $this->attachSubjectsWithSettings($exam, $validatedData, $school);
+
+                // Create exam papers for subjects that have them
+                $this->createExamPapers($exam, $validatedData);
+                
+                \Log::info('Exam creation completed successfully');
+            });
+
+            return redirect()->route('exams.index', $school)
+                ->with('success', 'Exam created successfully.');
+                
+        } catch (\Exception $e) {
+            \Log::error('Error creating exam: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
+            
+            return back()
+                ->withErrors(['error' => 'An error occurred while creating the exam: ' . $e->getMessage()])
+                ->withInput();
+        }
     }
 
-    private function getClassIds(Request $request, School $school)
+    private function getClassIds($validatedData, School $school)
     {
-        switch ($request->scope_type) {
+        switch ($validatedData['scope_type']) {
             case 'all_school':
                 return $school->classes->pluck('id')->toArray();
             case 'selected_classes':
-                return $request->selected_classes;
+                return $validatedData['selected_classes'] ?? [];
             case 'single_class':
-                return [$request->single_class_id];
+                return isset($validatedData['single_class_id']) ? [$validatedData['single_class_id']] : [];
             default:
                 return [];
         }
     }
 
-    private function attachSubjectsWithSettings($exam, $request, School $school)
+    private function getSubjectIds($validatedData, School $school)
     {
-        $subjectIds = $this->getSubjectIds($request, $school);
+        switch ($validatedData['subject_scope_type']) {
+            case 'all_subjects':
+                return $school->subjects->pluck('id')->toArray();
+            case 'selected_subjects':
+                return $validatedData['selected_subjects'] ?? [];
+            case 'single_subject':
+                return isset($validatedData['single_subject_id']) ? [$validatedData['single_subject_id']] : [];
+            default:
+                return [];
+        }
+    }
+
+    private function attachSubjectsWithSettings($exam, $validatedData, School $school)
+    {
+        $subjectIds = $this->getSubjectIds($validatedData, $school);
         $pivotData = [];
 
         foreach ($subjectIds as $subjectId) {
-            $subjectSetting = collect($request->subject_settings)
+            $subjectSetting = collect($validatedData['subject_settings'])
                 ->firstWhere('subject_id', $subjectId);
 
             if ($subjectSetting) {
@@ -173,47 +226,125 @@ class ExamController extends Controller
                     'has_papers' => $subjectSetting['has_papers'] ?? false,
                     'paper_count' => $subjectSetting['paper_count'] ?? 1,
                 ];
+            } else {
+                // Default settings for subjects not explicitly configured
+                $pivotData[$subjectId] = [
+                    'total_marks' => 100,
+                    'pass_mark' => 40,
+                    'has_papers' => false,
+                    'paper_count' => 1,
+                ];
             }
         }
 
-        $exam->subjects()->attach($pivotData);
-    }
-
-    private function getSubjectIds($request, School $school)
-    {
-        switch ($request->subject_scope_type) {
-            case 'all_subjects':
-                return $school->subjects->pluck('id')->toArray();
-            case 'selected_subjects':
-                return $request->selected_subjects;
-            case 'single_subject':
-                return [$request->single_subject_id];
-            default:
-                return [];
+        if (!empty($pivotData)) {
+            $exam->subjects()->attach($pivotData);
+            \Log::info('Subjects attached with settings: ', $pivotData);
         }
     }
 
-    private function createExamPapers($exam, $request)
+    private function createExamPapers($exam, $validatedData)
     {
-        foreach ($request->subject_settings as $subjectSetting) {
-            if ($subjectSetting['has_papers'] && isset($subjectSetting['papers'])) {
+        if (!isset($validatedData['subject_settings'])) {
+            return;
+        }
+
+        foreach ($validatedData['subject_settings'] as $subjectSetting) {
+            if (($subjectSetting['has_papers'] ?? false) && !empty($subjectSetting['papers'])) {
                 foreach ($subjectSetting['papers'] as $index => $paper) {
-                    ExamPaper::create([
-                        'exam_id' => $exam->id,
-                        'subject_id' => $subjectSetting['subject_id'],
-                        'paper_number' => $index + 1,
-                        'paper_name' => $paper['name'],
-                        'total_marks' => $paper['marks'],
-                        'pass_mark' => $paper['pass_mark'],
-                        'duration_minutes' => $paper['duration_minutes'],
-                        'percentage_weight' => $paper['weight'],
-                        'instructions' => $paper['instructions'] ?? null,
-                        'is_practical' => str_contains(strtolower($paper['name']), 'practical'),
-                    ]);
+                    try {
+                        ExamPaper::create([
+                            'exam_id' => $exam->id,
+                            'subject_id' => $subjectSetting['subject_id'],
+                            'paper_number' => $index + 1,
+                            'paper_name' => $paper['name'],
+                            'total_marks' => $paper['marks'],
+                            'pass_mark' => $paper['pass_mark'],
+                            'duration_minutes' => $paper['duration_minutes'],
+                            'percentage_weight' => $paper['weight'],
+                            'instructions' => $paper['instructions'] ?? null,
+                            'is_practical' => str_contains(strtolower($paper['name']), 'practical'),
+                        ]);
+                        
+                        \Log::info("Created paper {$paper['name']} for subject {$subjectSetting['subject_id']}");
+                    } catch (\Exception $e) {
+                        \Log::error("Failed to create paper {$paper['name']}: " . $e->getMessage());
+                        throw $e;
+                    }
                 }
             }
         }
     }
+
+    // public function store(Request $request, School $school)
+    // {
+    //     \Log::info('ExamController@store method called.');
+    //     \Log::info($request->all());
+
+    //     $this->authorize('create-exam', $school);
+
+    //     $request->validate([
+    //         'exam_series_id' => 'required|exists:exam_series,id',
+    //         'exam_category_id' => 'required|exists:exam_categories,id',
+    //         'grading_system_id' => 'required|exists:grading_systems,id',
+    //         'name' => 'required|string|max:255',
+    //         'description' => 'nullable|string',
+    //         'start_date' => 'required|date',
+    //         'end_date' => 'required|date|after_or_equal:start_date',
+    //         'instructions' => 'nullable|string',
+    //         'scope_type' => 'required|in:all_school,selected_classes,single_class',
+    //         'subject_scope_type' => 'required|in:all_subjects,selected_subjects,single_subject',
+    //         'selected_classes' => 'required_if:scope_type,selected_classes|array',
+    //         'selected_classes.*' => 'exists:school_classes,id',
+    //         'single_class_id' => 'required_if:scope_type,single_class|exists:school_classes,id',
+    //         'selected_subjects' => 'required_if:subject_scope_type,selected_subjects|array',
+    //         'selected_subjects.*' => 'exists:subjects,id',
+    //         'single_subject_id' => 'required_if:subject_scope_type,single_subject|exists:subjects,id',
+    //         'subject_settings' => 'required|array',
+    //         'subject_settings.*.subject_id' => 'required|exists:subjects,id',
+    //         'subject_settings.*.total_marks' => 'required|integer|min:1',
+    //         'subject_settings.*.pass_mark' => 'required|integer|min:0',
+    //         'subject_settings.*.has_papers' => 'boolean',
+    //         'subject_settings.*.paper_count' => 'required_if:subject_settings.*.has_papers,true|integer|min:1|max:5',
+    //         'subject_settings.*.papers' => 'required_if:subject_settings.*.has_papers,true|array',
+    //         'subject_settings.*.papers.*.name' => 'required|string|max:255',
+    //         'subject_settings.*.papers.*.marks' => 'required|integer|min:1',
+    //         'subject_settings.*.papers.*.pass_mark' => 'required|integer|min:0',
+    //         'subject_settings.*.papers.*.duration_minutes' => 'required|integer|min:30',
+    //         'subject_settings.*.papers.*.weight' => 'required|numeric|min:0|max:100',
+    //     ]);
+
+    //     DB::transaction(function () use ($request, $school) {
+    //         // Create exam
+    //         $exam = $school->exams()->create([
+    //             'exam_series_id' => $request->exam_series_id,
+    //             'exam_category_id' => $request->exam_category_id,
+    //             'grading_system_id' => $request->grading_system_id,
+    //             'name' => $request->name,
+    //             'description' => $request->description,
+    //             'start_date' => $request->start_date,
+    //             'end_date' => $request->end_date,
+    //             'instructions' => $request->instructions,
+    //             'scope_type' => $request->scope_type,
+    //             'subject_scope_type' => $request->subject_scope_type,
+    //             'exam_status' => 'draft',
+    //             'created_by' => auth()->id(),
+    //         ]);
+
+    //         // Attach classes
+    //         $classIds = $this->getClassIds($request, $school);
+    //         $exam->classes()->attach($classIds);
+
+    //         // Attach subjects with settings
+    //         $this->attachSubjectsWithSettings($exam, $request, $school);
+
+    //         // Create exam papers for subjects that have them
+    //         $this->createExamPapers($exam, $request);
+    //     });
+
+    //     return redirect()->route('exams.index', $school)
+    //         ->with('success', 'Exam created successfully.');
+    // }
 
     public function show(School $school, Exam $exam)
     {

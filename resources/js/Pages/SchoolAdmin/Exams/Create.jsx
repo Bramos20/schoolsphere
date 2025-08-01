@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Head, useForm, Link } from '@inertiajs/react';
+import React, { useState, useEffect } from 'react';
+import { Head, useForm, Link, router } from '@inertiajs/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,13 +8,29 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ArrowLeft, Save, Plus, Trash2, BookOpen } from 'lucide-react';
+import { ArrowLeft, Save, Plus, Trash2, BookOpen, AlertTriangle } from 'lucide-react';
 
 export default function CreateExam({ school, classes, subjects, examSeries, categories, gradingSystems }) {
     const [selectedSubjects, setSelectedSubjects] = useState([]);
     const [subjectSettings, setSubjectSettings] = useState({});
+    const [submitting, setSubmitting] = useState(false); // Add this missing state
 
-    const { data, setData, post, processing, errors } = useForm({
+    // Debug props on component mount
+    useEffect(() => {
+        console.log('CreateExam component props:');
+        console.log('- school:', school);
+        console.log('- classes:', classes?.length || 0, 'classes');
+        console.log('- subjects:', subjects?.length || 0, 'subjects');
+        console.log('- examSeries:', examSeries?.length || 0, 'series');
+        console.log('- categories:', categories?.length || 0, 'categories');
+        console.log('- gradingSystems:', gradingSystems?.length || 0, 'grading systems');
+        
+        if (subjects && subjects.length > 0) {
+            console.log('First few subjects:', subjects.slice(0, 3));
+        }
+    }, []);
+
+    const { data, setData, post, processing, errors, setError, clearErrors } = useForm({
         exam_series_id: '',
         exam_category_id: '',
         grading_system_id: '',
@@ -31,6 +47,19 @@ export default function CreateExam({ school, classes, subjects, examSeries, cate
         single_subject_id: '',
         subject_settings: []
     });
+
+    // Debug errors
+    useEffect(() => {
+        if (Object.keys(errors).length > 0) {
+            console.log('Form errors:', errors);
+        }
+    }, [errors]);
+
+    // Error display component
+    const ErrorDisplay = ({ error, className = "" }) => {
+        if (!error) return null;
+        return <p className={`text-red-500 text-sm mt-1 ${className}`}>{error}</p>;
+    };
 
     const handleSubjectSelection = (subjectId, checked) => {
         const updated = checked 
@@ -146,69 +175,162 @@ export default function CreateExam({ school, classes, subjects, examSeries, cate
 
     const handleSingleSubjectSelection = (subjectId) => {
         setData('single_subject_id', subjectId);
-        const subject = subjects.find(s => s.id === subjectId);
-        setSubjectSettings({
-            [subjectId]: {
-                subject_id: subjectId,
-                subject_name: subject.name,
-                total_marks: 100,
-                pass_mark: 40,
-                has_papers: false,
-                paper_count: 1,
-                papers: []
-            }
-        });
-    };
-
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        
-        let settingsArray = [];
-        if (data.subject_scope_type === 'single_subject') {
-            const subject = subjects.find(s => s.id === data.single_subject_id);
-            if (subject) {
-                settingsArray = [{
-                    subject_id: data.single_subject_id,
+        const subject = subjects.find(s => s.id == subjectId);
+        if (subject) {
+            setSubjectSettings({
+                [subjectId]: {
+                    subject_id: parseInt(subjectId),
                     subject_name: subject.name,
                     total_marks: 100,
                     pass_mark: 40,
                     has_papers: false,
                     paper_count: 1,
                     papers: []
-                }];
-            }
-        } else if (data.subject_scope_type === 'all_subjects') {
-            settingsArray = subjects.map(subject => ({
-                subject_id: subject.id,
-                subject_name: subject.name,
-                total_marks: 100,
-                pass_mark: 40,
-                has_papers: false,
-                paper_count: 1,
-                papers: []
-            }));
-        } else {
-            settingsArray = Object.values(subjectSettings);
+                }
+            });
+        }
+    };
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        
+        console.log('=== FORM SUBMISSION START ===');
+        
+        // Clear previous errors
+        clearErrors();
+        
+        let settingsArray = [];
+        
+        console.log('Form submission debug:');
+        console.log('- subject_scope_type:', data.subject_scope_type);
+        console.log('- single_subject_id:', data.single_subject_id);
+        console.log('- selected_subjects:', selectedSubjects);
+        console.log('- subjects available:', subjects?.length || 0);
+        console.log('- subjects data:', subjects);
+        console.log('- subjectSettings state:', subjectSettings);
+        
+        // Safety check for subjects
+        if (!subjects || subjects.length === 0) {
+            console.error('❌ CRITICAL: No subjects available from backend!');
+            setError('subject_settings', 'No subjects available. Please check if subjects are created for this school.');
+            return;
         }
         
-        const finalData = { ...data, subject_settings: settingsArray };
-        post(route('exams.store', { school: school.id }), finalData);
-    };
-
-    // Get subjects to show based on scope type
-    const getSubjectsToShow = () => {
-        if (data.subject_scope_type === 'all_subjects') {
-            return subjects;
+        if (data.subject_scope_type === 'single_subject') {
+            if (!data.single_subject_id) {
+                console.error('Single subject not selected');
+                setError('single_subject_id', 'Please select a subject');
+                return;
+            }
+            const subject = subjects.find(s => s.id == data.single_subject_id);
+            if (subject) {
+                const setting = subjectSettings[data.single_subject_id] || {
+                    subject_id: parseInt(data.single_subject_id),
+                    total_marks: 100,
+                    pass_mark: 40,
+                    has_papers: false,
+                    paper_count: 1,
+                    papers: []
+                };
+                settingsArray = [setting];
+                console.log('✅ Single subject settings:', settingsArray);
+            }
+        } else if (data.subject_scope_type === 'all_subjects') {
+            console.log('🔄 Processing all subjects...');
+            settingsArray = subjects.map(subject => {
+                console.log('Processing subject:', subject.name, 'ID:', subject.id);
+                return {
+                    subject_id: subject.id,
+                    total_marks: 100,
+                    pass_mark: 40,
+                    has_papers: false,
+                    paper_count: 1,
+                    papers: []
+                };
+            });
+            console.log('✅ All subjects settings created:', settingsArray.length, 'subjects');
+            console.log('Settings:', settingsArray);
+        } else if (data.subject_scope_type === 'selected_subjects') {
+            if (selectedSubjects.length === 0) {
+                console.error('No subjects selected');
+                setError('selected_subjects', 'Please select at least one subject');
+                return;
+            }
+            settingsArray = Object.values(subjectSettings).filter(setting => 
+                selectedSubjects.includes(setting.subject_id)
+            );
+            console.log('✅ Selected subjects settings:', settingsArray);
         }
-        return subjects;
-    };
 
-    // Get classes to show based on scope type
-    const getClassesToShow = () => {
-        if (data.scope_type === 'all_school') {
-            return [];
+        // Validate that we have settings
+        if (settingsArray.length === 0) {
+            console.error('❌ CRITICAL: No subject settings prepared - this is the problem!');
+            console.log('Debug info:');
+            console.log('- subjects prop:', subjects);
+            console.log('- subjects length:', subjects?.length);
+            console.log('- data.subject_scope_type:', data.subject_scope_type);
+            setError('subject_settings', 'Could not prepare subject settings. Please check console for details.');
+            return;
         }
-        return classes;
+
+        // Ensure all required fields are present and properly typed
+        settingsArray = settingsArray.map(setting => ({
+            ...setting,
+            subject_id: parseInt(setting.subject_id),
+            total_marks: parseInt(setting.total_marks) || 100,
+            pass_mark: parseInt(setting.pass_mark) || 40,
+            has_papers: Boolean(setting.has_papers),
+            paper_count: parseInt(setting.paper_count) || 1,
+            papers: setting.has_papers ? (setting.papers || []).map(paper => ({
+                ...paper,
+                marks: parseInt(paper.marks) || 100,
+                pass_mark: parseInt(paper.pass_mark) || 40,
+                duration_minutes: parseInt(paper.duration_minutes) || 120,
+                weight: parseFloat(paper.weight) || 100
+            })) : []
+        }));
+
+        console.log('✅ Final processed settings:', settingsArray.length, 'subjects');
+
+        // Build final data - only include fields that should be sent based on scope
+        const finalData = { 
+            ...data,
+            subject_settings: settingsArray
+        };
+
+        // Add conditional fields based on scope types
+        if (data.scope_type === 'selected_classes') {
+            finalData.selected_classes = data.selected_classes.map(id => parseInt(id));
+        } else if (data.scope_type === 'single_class') {
+            finalData.single_class_id = parseInt(data.single_class_id);
+        }
+
+        if (data.subject_scope_type === 'selected_subjects') {
+            finalData.selected_subjects = data.selected_subjects.map(id => parseInt(id));
+        } else if (data.subject_scope_type === 'single_subject') {
+            finalData.single_subject_id = parseInt(data.single_subject_id);
+        }
+
+        console.log('🚀 Final data being submitted:');
+        console.log('- subject_settings length:', finalData.subject_settings.length);
+        console.log('- full data:', finalData);
+        console.log('=== FORM SUBMISSION END ===');
+        
+        // Use the useForm post method instead of router.post for better error handling
+        post(route('exams.store', { school: school.id }), {
+            data: finalData,
+            onError: (errors) => {
+                console.error('❌ Submission errors:', errors);
+                // Scroll to first error
+                const firstErrorElement = document.querySelector('.text-red-500');
+                if (firstErrorElement) {
+                    firstErrorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            },
+            onSuccess: () => {
+                console.log('✅ Exam created successfully');
+            }
+        });
     };
 
     return (
@@ -230,6 +352,26 @@ export default function CreateExam({ school, classes, subjects, examSeries, cate
                     </div>
                 </div>
 
+                {/* Global error display */}
+                {Object.keys(errors).length > 0 && (
+                    <Alert className="mb-6 border-red-200 bg-red-50">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertDescription className="text-red-800">
+                            There are errors in your form. Please check the highlighted fields below.
+                        </AlertDescription>
+                    </Alert>
+                )}
+
+                {/* Debug info in development */}
+                {process.env.NODE_ENV === 'development' && Object.keys(errors).length > 0 && (
+                    <div className="mb-4 p-4 bg-gray-100 rounded">
+                        <details>
+                            <summary className="cursor-pointer text-sm font-medium">Debug Info (Development Only)</summary>
+                            <pre className="mt-2 text-xs overflow-auto">{JSON.stringify({ errors, dataSubset: { subject_settings: data.subject_settings } }, null, 2)}</pre>
+                        </details>
+                    </div>
+                )}
+
                 <form onSubmit={handleSubmit}>
                     <div className="grid gap-6 lg:grid-cols-3">
                         <div className="lg:col-span-2">
@@ -246,7 +388,7 @@ export default function CreateExam({ school, classes, subjects, examSeries, cate
                                         <div>
                                             <Label htmlFor="exam_series_id">Exam Series *</Label>
                                             <Select value={data.exam_series_id} onValueChange={(value) => setData('exam_series_id', value)}>
-                                                <SelectTrigger>
+                                                <SelectTrigger className={errors.exam_series_id ? 'border-red-500' : ''}>
                                                     <SelectValue placeholder="Select exam series" />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -257,13 +399,13 @@ export default function CreateExam({ school, classes, subjects, examSeries, cate
                                                     ))}
                                                 </SelectContent>
                                             </Select>
-                                            {errors.exam_series_id && <p className="text-red-500 text-sm mt-1">{errors.exam_series_id}</p>}
+                                            <ErrorDisplay error={errors.exam_series_id} />
                                         </div>
 
                                         <div>
                                             <Label htmlFor="exam_category_id">Category *</Label>
                                             <Select value={data.exam_category_id} onValueChange={(value) => setData('exam_category_id', value)}>
-                                                <SelectTrigger>
+                                                <SelectTrigger className={errors.exam_category_id ? 'border-red-500' : ''}>
                                                     <SelectValue placeholder="Select category" />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -274,7 +416,7 @@ export default function CreateExam({ school, classes, subjects, examSeries, cate
                                                     ))}
                                                 </SelectContent>
                                             </Select>
-                                            {errors.exam_category_id && <p className="text-red-500 text-sm mt-1">{errors.exam_category_id}</p>}
+                                            <ErrorDisplay error={errors.exam_category_id} />
                                         </div>
                                     </div>
 
@@ -285,8 +427,9 @@ export default function CreateExam({ school, classes, subjects, examSeries, cate
                                             value={data.name}
                                             onChange={(e) => setData('name', e.target.value)}
                                             placeholder="e.g., End of Term 2 Exams"
+                                            className={errors.name ? 'border-red-500' : ''}
                                         />
-                                        {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name}</p>}
+                                        <ErrorDisplay error={errors.name} />
                                     </div>
 
                                     <div>
@@ -297,7 +440,9 @@ export default function CreateExam({ school, classes, subjects, examSeries, cate
                                             onChange={(e) => setData('description', e.target.value)}
                                             placeholder="Brief description of the exam"
                                             rows={3}
+                                            className={errors.description ? 'border-red-500' : ''}
                                         />
+                                        <ErrorDisplay error={errors.description} />
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-4">
@@ -308,8 +453,9 @@ export default function CreateExam({ school, classes, subjects, examSeries, cate
                                                 type="date"
                                                 value={data.start_date}
                                                 onChange={(e) => setData('start_date', e.target.value)}
+                                                className={errors.start_date ? 'border-red-500' : ''}
                                             />
-                                            {errors.start_date && <p className="text-red-500 text-sm mt-1">{errors.start_date}</p>}
+                                            <ErrorDisplay error={errors.start_date} />
                                         </div>
 
                                         <div>
@@ -319,8 +465,9 @@ export default function CreateExam({ school, classes, subjects, examSeries, cate
                                                 type="date"
                                                 value={data.end_date}
                                                 onChange={(e) => setData('end_date', e.target.value)}
+                                                className={errors.end_date ? 'border-red-500' : ''}
                                             />
-                                            {errors.end_date && <p className="text-red-500 text-sm mt-1">{errors.end_date}</p>}
+                                            <ErrorDisplay error={errors.end_date} />
                                         </div>
                                     </div>
                                 </CardContent>
@@ -338,7 +485,7 @@ export default function CreateExam({ school, classes, subjects, examSeries, cate
                                     <div>
                                         <Label>Exam Scope</Label>
                                         <Select value={data.scope_type} onValueChange={(value) => setData('scope_type', value)}>
-                                            <SelectTrigger>
+                                            <SelectTrigger className={errors.scope_type ? 'border-red-500' : ''}>
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -347,6 +494,7 @@ export default function CreateExam({ school, classes, subjects, examSeries, cate
                                                 <SelectItem value="single_class">Single Class</SelectItem>
                                             </SelectContent>
                                         </Select>
+                                        <ErrorDisplay error={errors.scope_type} />
                                     </div>
 
                                     {data.scope_type === 'selected_classes' && (
@@ -366,7 +514,7 @@ export default function CreateExam({ school, classes, subjects, examSeries, cate
                                                     </div>
                                                 ))}
                                             </div>
-                                            {errors.selected_classes && <p className="text-red-500 text-sm mt-1">{errors.selected_classes}</p>}
+                                            <ErrorDisplay error={errors.selected_classes} />
                                         </div>
                                     )}
 
@@ -374,7 +522,7 @@ export default function CreateExam({ school, classes, subjects, examSeries, cate
                                         <div>
                                             <Label htmlFor="single_class_id">Select Class *</Label>
                                             <Select value={data.single_class_id} onValueChange={(value) => setData('single_class_id', value)}>
-                                                <SelectTrigger>
+                                                <SelectTrigger className={errors.single_class_id ? 'border-red-500' : ''}>
                                                     <SelectValue placeholder="Select a class" />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -385,7 +533,7 @@ export default function CreateExam({ school, classes, subjects, examSeries, cate
                                                     ))}
                                                 </SelectContent>
                                             </Select>
-                                            {errors.single_class_id && <p className="text-red-500 text-sm mt-1">{errors.single_class_id}</p>}
+                                            <ErrorDisplay error={errors.single_class_id} />
                                         </div>
                                     )}
                                 </CardContent>
@@ -403,7 +551,7 @@ export default function CreateExam({ school, classes, subjects, examSeries, cate
                                     <div>
                                         <Label>Subject Scope</Label>
                                         <Select value={data.subject_scope_type} onValueChange={(value) => setData('subject_scope_type', value)}>
-                                            <SelectTrigger>
+                                            <SelectTrigger className={errors.subject_scope_type ? 'border-red-500' : ''}>
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -412,6 +560,7 @@ export default function CreateExam({ school, classes, subjects, examSeries, cate
                                                 <SelectItem value="single_subject">Single Subject</SelectItem>
                                             </SelectContent>
                                         </Select>
+                                        <ErrorDisplay error={errors.subject_scope_type} />
                                     </div>
 
                                     {data.subject_scope_type === 'selected_subjects' && (
@@ -431,7 +580,7 @@ export default function CreateExam({ school, classes, subjects, examSeries, cate
                                                     </div>
                                                 ))}
                                             </div>
-                                            {errors.selected_subjects && <p className="text-red-500 text-sm mt-1">{errors.selected_subjects}</p>}
+                                            <ErrorDisplay error={errors.selected_subjects} />
                                         </div>
                                     )}
 
@@ -439,7 +588,7 @@ export default function CreateExam({ school, classes, subjects, examSeries, cate
                                         <div>
                                             <Label htmlFor="single_subject_id">Select Subject *</Label>
                                             <Select value={data.single_subject_id} onValueChange={(value) => handleSingleSubjectSelection(value)}>
-                                                <SelectTrigger>
+                                                <SelectTrigger className={errors.single_subject_id ? 'border-red-500' : ''}>
                                                     <SelectValue placeholder="Select a subject" />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -450,7 +599,7 @@ export default function CreateExam({ school, classes, subjects, examSeries, cate
                                                     ))}
                                                 </SelectContent>
                                             </Select>
-                                            {errors.single_subject_id && <p className="text-red-500 text-sm mt-1">{errors.single_subject_id}</p>}
+                                            <ErrorDisplay error={errors.single_subject_id} />
                                         </div>
                                     )}
 
@@ -610,7 +759,7 @@ export default function CreateExam({ school, classes, subjects, examSeries, cate
                                     <div>
                                         <Label htmlFor="grading_system_id">Grading System *</Label>
                                         <Select value={data.grading_system_id} onValueChange={(value) => setData('grading_system_id', value)}>
-                                            <SelectTrigger>
+                                            <SelectTrigger className={errors.grading_system_id ? 'border-red-500' : ''}>
                                                 <SelectValue placeholder="Select grading system" />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -621,7 +770,7 @@ export default function CreateExam({ school, classes, subjects, examSeries, cate
                                                 ))}
                                             </SelectContent>
                                         </Select>
-                                        {errors.grading_system_id && <p className="text-red-500 text-sm mt-1">{errors.grading_system_id}</p>}
+                                        <ErrorDisplay error={errors.grading_system_id} />
                                     </div>
                                 </CardContent>
                             </Card>
@@ -636,7 +785,9 @@ export default function CreateExam({ school, classes, subjects, examSeries, cate
                                         onChange={(e) => setData('instructions', e.target.value)}
                                         placeholder="Any special instructions for this exam..."
                                         rows={4}
+                                        className={errors.instructions ? 'border-red-500' : ''}
                                     />
+                                    <ErrorDisplay error={errors.instructions} />
                                 </CardContent>
                             </Card>
 
@@ -644,6 +795,39 @@ export default function CreateExam({ school, classes, subjects, examSeries, cate
                                 <Save className="h-4 w-4 mr-2" />
                                 {processing ? 'Creating...' : 'Create Exam'}
                             </Button>
+
+                            {/* Additional validation messages */}
+                            {errors.subject_settings && (
+                                <Alert className="mt-4 border-red-200 bg-red-50">
+                                    <AlertTriangle className="h-4 w-4" />
+                                    <AlertDescription className="text-red-800">
+                                        {typeof errors.subject_settings === 'string' 
+                                            ? errors.subject_settings 
+                                            : 'There are errors in subject configuration. Please check your settings.'}
+                                    </AlertDescription>
+                                </Alert>
+                            )}
+
+                            {/* Show nested validation errors for subject settings */}
+                            {Object.keys(errors).some(key => key.startsWith('subject_settings.')) && (
+                                <Alert className="mt-4 border-red-200 bg-red-50">
+                                    <AlertTriangle className="h-4 w-4" />
+                                    <AlertDescription className="text-red-800">
+                                        <div className="text-sm">
+                                            <p className="font-medium mb-2">Subject Configuration Errors:</p>
+                                            <ul className="list-disc list-inside space-y-1">
+                                                {Object.entries(errors)
+                                                    .filter(([key]) => key.startsWith('subject_settings.'))
+                                                    .map(([key, error]) => (
+                                                        <li key={key} className="text-xs">
+                                                            {key.replace('subject_settings.', '')}: {error}
+                                                        </li>
+                                                    ))}
+                                            </ul>
+                                        </div>
+                                    </AlertDescription>
+                                </Alert>
+                            )}
                         </div>
                     </div>
                 </form>
