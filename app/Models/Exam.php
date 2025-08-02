@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Student;
 
 class Exam extends Model
 {
@@ -83,13 +84,11 @@ class Exam extends Model
     // Get all students eligible for this exam
     public function getEligibleStudents()
     {
-        $students = collect();
+        // Get all class IDs associated with this exam
+        $classIds = $this->classes()->pluck('school_classes.id');
 
-        foreach ($this->classes as $class) {
-            $students = $students->merge($class->students);
-        }
-
-        return $students->unique('id');
+        // Get all students from those classes
+        return Student::whereIn('class_id', $classIds)->get();
     }
 
     // Get subjects a teacher can enter results for
