@@ -259,7 +259,7 @@ Route::middleware(['auth'])->prefix('schools/{school}')->group(function () {
     
     // Result entry routes (accessible to both admin and teachers)
     // Updated to use proper authorization middleware
-    Route::group(function () {
+    Route::middleware(\App\Http\Middleware\EnsureCanEnterResults::class)->group(function () {
         Route::get('/exams/{exam}/subjects/{subject}/results', [ExamController::class, 'enterResults'])->name('exams.enter-results');
         Route::post('/exams/{exam}/subjects/{subject}/results', [ExamController::class, 'storeResults'])->name('exams.store-results');
         Route::put('/exams/{exam}/subjects/{subject}/results/{result}', [ExamController::class, 'updateResult'])->name('exams.update-result');

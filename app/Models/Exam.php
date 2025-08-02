@@ -161,4 +161,184 @@ class Exam extends Model
     {
         return $this->start_date->diffInDays($this->end_date) + 1;
     }
+
+    // Status management methods
+    public function canBeActivated()
+    {
+        return $this->exam_status === 'draft' &&
+               $this->subjects()->count() > 0 &&
+               $this->classes()->count() > 0;
+    }
+
+    public function canBeCompleted()
+    {
+        return $this->exam_status === 'active';
+    }
+
+    public function canBePublished()
+    {
+        return $this->exam_status === 'completed' &&
+               $this->hasResultsEntered();
+    }
+
+    public function hasResultsEntered()
+    {
+        return $this->results()->count() > 0;
+    }
+
+    public function activate()
+    {
+        if ($this->canBeActivated()) {
+            $this->update(['exam_status' => 'active']);
+            return true;
+        }
+        return false;
+    }
+
+    public function complete()
+    {
+        if ($this->canBeCompleted()) {
+            $this->update(['exam_status' => 'completed']);
+            return true;
+        }
+        return false;
+    }
+
+    public function publish()
+    {
+        if ($this->canBePublished()) {
+            $this->update([
+                'exam_status' => 'published',
+                'is_published' => true
+            ]);
+            return true;
+        }
+        return false;
+    }
+
+    // Validation methods
+    public function validateStructure()
+    {
+        $errors = [];
+
+        if ($this->subjects()->count() === 0) {
+            $errors[] = 'Exam must have at least one subject assigned.';
+        }
+
+        if ($this->classes()->count() === 0) {
+            $errors[] = 'Exam must have at least one class assigned.';
+        }
+
+        if ($this->start_date > $this->end_date) {
+            $errors[] = 'Start date must be before or equal to end date.';
+        }
+
+        // Check if subjects have proper paper configuration
+        foreach ($this->subjects as $subject) {
+            if ($subject->pivot->has_papers) {
+                $papers = $this->examPapers()->where('subject_id', $subject->id)->get();
+                if ($papers->isEmpty()) {
+                    $errors[] = "Subject '{$subject->name}' is configured for multiple papers but has no papers defined.";
+                }
+
+                // Check if paper weights sum to 100%
+                $totalWeight = $papers->sum('percentage_weight');
+                if (abs($totalWeight - 100) > 0.01) {
+                    $errors[] = "Papers for '{$subject->name}' must have weights that sum to 100%. Current total: {$totalWeight}%.";
+                }
+            }
+        }
+
+        return $errors;
+    }
+
+    // Get completion percentage
+    public function getCompletionPercentage()
+    {
+        $totalSubjects = $this->subjects()->count();
+        if ($totalSubjects === 0) return 0;
+
+        $subjectsWithResults = $this->results()
+            ->select('subject_id')
+            ->distinct()
+            ->count();
+
+        return round(($subjectsWithResults / $totalSubjects) * 100, 2);
+    }
+
+    // Get results entry progress
+    public function getResultsProgress()
+    {
+        $eligibleStudents = $this->getEligibleStudents()->count();
+        $totalExpectedResults = $eligibleStudents * $this->subjects()->count();
+        
+        if ($totalExpectedResults === 0) return 0;
+
+        $actualResults = $this->results()->count();
+        
+        return round(($actualResults / $totalExpectedResults) * 100, 2);
+    }
+
+    // Scope methods for queries
+    public function scopeByStatus($query, $status)
+    {
+        return $query->where('exam_status', $status);
+    }
+
+    public function scopeBySchool($query, $schoolId)
+    {
+        return $query->where('school_id', $schoolId);
+    }
+
+    public function scopeBySeries($query, $seriesId)
+    {
+        return $query->where('exam_series_id', $seriesId);
+    }
+
+    public function scopeActive($query)
+    {
+        return $query->where('exam_status', 'active');
+    }
+
+    public function scopePublished($query)
+    {
+        return $query->where('exam_status', 'published')
+                    ->where('is_published', true);
+    }
+
+    // Auto-sync pivot data when updating subjects
+    public function syncSubjectsWithSettings($subjectSettings)
+    {
+        $pivotData = [];
+        
+        foreach ($subjectSettings as $setting) {
+            $pivotData[$setting['subject_id']] = [
+                'total_marks' => $setting['total_marks'],
+                'pass_mark' => $setting['pass_mark'],
+                'has_papers' => $setting['has_papers'] ?? false,
+                'paper_count' => $setting['paper_count'] ?? 1,
+            ];
+        }
+
+        $this->subjects()->sync($pivotData);
+    }
+
+    // Get exam summary for reporting
+    public function getSummary()
+    {
+        return [
+            'id' => $this->id,
+            'name' => $this->name,
+            'status' => $this->exam_status,
+            'series' => $this->examSeries->name ?? 'No Series',
+            'category' => $this->examCategory->name ?? 'No Category',
+            'duration' => $this->getDurationInDays() . ' days',
+            'classes_count' => $this->classes()->count(),
+            'subjects_count' => $this->subjects()->count(),
+            'eligible_students' => $this->getEligibleStudents()->count(),
+            'results_entered' => $this->results()->count(),
+            'completion_percentage' => $this->getCompletionPercentage(),
+            'results_progress' => $this->getResultsProgress(),
+        ];
+    }
 }

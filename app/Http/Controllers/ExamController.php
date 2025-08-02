@@ -44,12 +44,14 @@ class ExamController extends Controller
         $examSeries = $school->examSeries()->where('is_active', true)->get();
         $categories = $school->examCategories()->where('is_active', true)->get();
 
+        $role = $user->hasRole('school_admin') ? 'school_admin' : ($user->roles->first()->name ?? null);
+
         return Inertia::render('SchoolAdmin/Exams/Index', [
             'school' => $school,
             'exams' => $exams,
             'examSeries' => $examSeries,
             'categories' => $categories,
-            'userRole' => $user->roles->first()->name ?? null,
+            'userRole' => $role,
         ]);
     }
 
@@ -499,13 +501,15 @@ class ExamController extends Controller
         $statistics = $exam->getStatistics();
         $eligibleStudents = $exam->getEligibleStudents()->count();
 
+        $role = $user->hasRole('school_admin') ? 'school_admin' : ($user->roles->first()->name ?? null);
+
         return Inertia::render('SchoolAdmin/Exams/Show', [
             'school' => $school,
             'exam' => $exam,
             'statistics' => $statistics,
             'eligibleStudents' => $eligibleStudents,
             'teacherSubjects' => $teacherSubjects,
-            'userRole' => $user->roles->first()->name ?? null,
+            'userRole' => $role,
         ]);
     }
 
