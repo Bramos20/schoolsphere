@@ -85,6 +85,11 @@ class ExamPolicy
      */
     public function enterResults(User $user, Exam $exam, Subject $subject = null)
     {
+        // Check if exam allows result entry based on status
+        if (!in_array($exam->exam_status, ['draft', 'active', 'completed'])) {
+            return false;
+        }
+
         // School admin can enter results for any exam status except published (with restrictions)
         if ($user->hasRole('school_admin') && $user->school_id === $exam->school_id) {
             // Allow for draft, active, and completed exams
@@ -101,15 +106,45 @@ class ExamPolicy
         // Teachers can enter results for active and completed exams for subjects they teach
         if ($user->hasRole('teacher') && in_array($exam->exam_status, ['active', 'completed'])) {
             if ($subject) {
+                // Check if teacher is assigned to teach this subject in any stream that's part of this exam
                 return SubjectTeacherStream::where('teacher_id', $user->id)
                     ->where('subject_id', $subject->id)
+                    ->whereHas('stream.class', function($query) use ($exam) {
+                        $query->whereIn('school_classes.id', $exam->classes()->pluck('school_classes.id'));
+                    })
                     ->exists();
             }
             
             // If no specific subject provided, check if teacher teaches any subject in the exam
-            return $exam->subjects()->whereHas('streamAssignments', function ($query) use ($user) {
-                $query->where('teacher_id', $user->id);
+            return $exam->subjects()->whereHas('streamAssignments', function ($query) use ($user, $exam) {
+                $query->where('teacher_id', $user->id)
+                    ->whereHas('stream.class', function($q) use ($exam) {
+                        $q->whereIn('school_classes.id', $exam->classes()->pluck('school_classes.id'));
+                    });
             })->exists();
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if teacher can access specific subject results with proper stream validation
+     */
+    public function accessSubjectResults(User $user, Exam $exam, Subject $subject)
+    {
+        // School admin can access all subject results
+        if ($user->hasRole('school_admin') && $user->school_id === $exam->school_id) {
+            return true;
+        }
+
+        // Teachers can only access results for subjects they teach in streams that are part of this exam
+        if ($user->hasRole('teacher')) {
+            return SubjectTeacherStream::where('teacher_id', $user->id)
+                ->where('subject_id', $subject->id)
+                ->whereHas('stream.class', function($query) use ($exam) {
+                    $query->whereIn('school_classes.id', $exam->classes()->pluck('school_classes.id'));
+                })
+                ->exists();
         }
 
         return false;
@@ -173,26 +208,6 @@ class ExamPolicy
             return $exam->subjects()->whereHas('streamAssignments', function ($query) use ($user) {
                 $query->where('teacher_id', $user->id);
             })->exists();
-        }
-
-        return false;
-    }
-
-    /**
-     * Check if user can access a specific subject's results in the exam.
-     */
-    public function accessSubjectResults(User $user, Exam $exam, Subject $subject)
-    {
-        // School admin can access all subject results
-        if ($user->hasRole('school_admin') && $user->school_id === $exam->school_id) {
-            return true;
-        }
-
-        // Teachers can only access results for subjects they teach
-        if ($user->hasRole('teacher')) {
-            return SubjectTeacherStream::where('teacher_id', $user->id)
-                                     ->where('subject_id', $subject->id)
-                                     ->exists();
         }
 
         return false;

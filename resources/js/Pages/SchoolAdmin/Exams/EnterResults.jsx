@@ -9,6 +9,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
     Save, 
     AlertTriangle, 
@@ -18,7 +19,8 @@ import {
     ArrowLeft,
     Calculator,
     Eye,
-    EyeOff
+    EyeOff,
+    Filter
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -27,13 +29,17 @@ export default function EnterResults({
     exam, 
     subject, 
     students, 
+    studentsByStream,
     examPapers, 
     existingResults,
+    teacherStreams,
+    userRole,
     auth 
 }) {
     const [selectedStudents, setSelectedStudents] = useState(new Set());
     const [showAbsentOnly, setShowAbsentOnly] = useState(false);
     const [showCompletedOnly, setShowCompletedOnly] = useState(false);
+    const [selectedStream, setSelectedStream] = useState('all');
     const [bulkAction, setBulkAction] = useState('');
     
     const { data, setData, post, processing, errors, reset } = useForm({
@@ -55,6 +61,10 @@ export default function EnterResults({
             };
         })
     });
+
+    // Check if user has students assigned
+    const hasStudents = students && students.length > 0;
+    const streamOptions = Object.keys(studentsByStream || {});
 
     const handleStudentAbsentChange = (studentIndex, isAbsent) => {
         const newResults = [...data.results];
@@ -117,6 +127,11 @@ export default function EnterResults({
     const handleSubmit = (e) => {
         e.preventDefault();
         
+        if (!hasStudents) {
+            toast.error('No students assigned to you for this subject and exam.');
+            return;
+        }
+        
         // Validate that all non-absent students have marks entered
         const incompleteResults = data.results.filter(result => {
             if (result.is_absent) return false;
@@ -166,11 +181,22 @@ export default function EnterResults({
 
     const filteredStudents = students.filter((student, index) => {
         const result = data.results[index];
+        
+        // Stream filter
+        if (selectedStream !== 'all') {
+            const studentStream = `${student.class.name} - ${student.stream?.name ?? 'No Stream'}`;
+            if (studentStream !== selectedStream) return false;
+        }
+        
+        // Absent filter
         if (showAbsentOnly && !result.is_absent) return false;
+        
+        // Completed filter
         if (showCompletedOnly) {
             const isComplete = result.is_absent || result.paper_results.every(paper => paper.marks && paper.marks !== '');
             if (!isComplete) return false;
         }
+        
         return true;
     });
 
@@ -179,6 +205,68 @@ export default function EnterResults({
     ).length;
 
     const absentCount = data.results.filter(result => result.is_absent).length;
+
+    // Show warning if no students
+    if (!hasStudents) {
+        return (
+            <AppLayout
+                user={auth.user}
+                header={
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h2 className="font-semibold text-xl text-gray-800 leading-tight">
+                                Enter Results - {subject.name}
+                            </h2>
+                            <p className="text-sm text-gray-600 mt-1">
+                                {exam.name} • {exam.exam_series?.name} • {exam.exam_category?.name}
+                            </p>
+                        </div>
+                        <Button
+                            variant="outline"
+                            onClick={() => router.visit(route('exams.show', [school.id, exam.id]))}
+                        >
+                            <ArrowLeft className="w-4 h-4 mr-2" />
+                            Back to Exam
+                        </Button>
+                    </div>
+                }
+            >
+                <Head title={`Enter Results - ${subject.name}`} />
+                
+                <div className="py-12">
+                    <div className="max-w-4xl mx-auto sm:px-6 lg:px-8">
+                        <Alert className="border-orange-200 bg-orange-50">
+                            <AlertTriangle className="h-4 w-4 text-orange-600" />
+                            <AlertDescription className="text-orange-800">
+                                <strong>No students assigned:</strong> You don't have any students assigned for this subject in this exam. 
+                                {userRole === 'teacher' && (
+                                    <span> Please contact your school administrator to verify your subject and stream assignments.</span>
+                                )}
+                            </AlertDescription>
+                        </Alert>
+                        
+                        {teacherStreams && teacherStreams.length > 0 && (
+                            <Card className="mt-6">
+                                <CardHeader>
+                                    <CardTitle>Your Assigned Streams</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="space-y-2">
+                                        {teacherStreams.map((assignment, index) => (
+                                            <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                                <span>{assignment.stream.class.name} - {assignment.stream.name}</span>
+                                                <Badge variant="secondary">No students in exam</Badge>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        )}
+                    </div>
+                </div>
+            </AppLayout>
+        );
+    }
 
     return (
         <AppLayout
@@ -192,6 +280,11 @@ export default function EnterResults({
                         <p className="text-sm text-gray-600 mt-1">
                             {exam.name} • {exam.exam_series?.name} • {exam.exam_category?.name}
                         </p>
+                        {userRole === 'teacher' && (
+                            <p className="text-xs text-blue-600 mt-1">
+                                You can only enter results for students in your assigned streams
+                            </p>
+                        )}
                     </div>
                     <Button
                         variant="outline"
@@ -263,6 +356,26 @@ export default function EnterResults({
                     <Card>
                         <CardContent className="p-4">
                             <div className="flex flex-wrap items-center gap-4">
+                                {/* Stream Filter - Only show if multiple streams */}
+                                {streamOptions.length > 1 && (
+                                    <div className="flex items-center space-x-2">
+                                        <Label htmlFor="stream-filter">Filter by Stream:</Label>
+                                        <Select value={selectedStream} onValueChange={setSelectedStream}>
+                                            <SelectTrigger className="w-48">
+                                                <SelectValue placeholder="Select stream" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="all">All Streams</SelectItem>
+                                                {streamOptions.map((stream) => (
+                                                    <SelectItem key={stream} value={stream}>
+                                                        {stream} ({studentsByStream[stream].length} students)
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                )}
+                                
                                 <div className="flex items-center space-x-2">
                                     <Checkbox
                                         id="show-absent"
@@ -306,6 +419,35 @@ export default function EnterResults({
                         </CardContent>
                     </Card>
 
+                    {/* Your Assigned Streams Info (for teachers) */}
+                    {userRole === 'teacher' && teacherStreams && teacherStreams.length > 0 && (
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="text-lg">Your Assigned Streams</CardTitle>
+                                <CardDescription>
+                                    You can enter results for students in these streams only
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    {teacherStreams.map((assignment, index) => {
+                                        const streamKey = `${assignment.stream.class.name} - ${assignment.stream.name}`;
+                                        const studentCount = studentsByStream[streamKey]?.length || 0;
+                                        return (
+                                            <div key={index} className="p-3 border rounded-lg">
+                                                <h4 className="font-medium">{assignment.stream.class.name}</h4>
+                                                <p className="text-sm text-gray-600">{assignment.stream.name}</p>
+                                                <Badge variant={studentCount > 0 ? "default" : "secondary"} className="mt-2">
+                                                    {studentCount} students
+                                                </Badge>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
+
                     {/* Paper Information */}
                     {examPapers.length > 1 && (
                         <Card>
@@ -335,7 +477,12 @@ export default function EnterResults({
                         <Card>
                             <CardHeader>
                                 <div className="flex items-center justify-between">
-                                    <CardTitle>Enter Results</CardTitle>
+                                    <div>
+                                        <CardTitle>Enter Results</CardTitle>
+                                        <CardDescription>
+                                            {filteredStudents.length} of {students.length} students shown
+                                        </CardDescription>
+                                    </div>
                                     <Button type="submit" disabled={processing}>
                                         <Save className="w-4 h-4 mr-2" />
                                         {processing ? 'Saving...' : 'Save Results'}

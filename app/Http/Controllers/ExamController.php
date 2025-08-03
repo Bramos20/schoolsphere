@@ -7,6 +7,8 @@ use App\Models\ExamPaper;
 use App\Models\ExamResult;
 use App\Models\ExamPaperResult;
 use App\Models\School;
+use App\Models\Student;
+use App\Models\SubjectTeacherStream;
 use App\Models\Subject;
 use App\Models\StudentTermSummary;
 use Illuminate\Http\Request;
@@ -513,6 +515,7 @@ class ExamController extends Controller
         ]);
     }
 
+    // Updated enterResults method in ExamController.php
     public function enterResults(School $school, Exam $exam, Subject $subject)
     {
         $user = auth()->user();
@@ -528,8 +531,16 @@ class ExamController extends Controller
                 ->withErrors(['error' => 'Results can only be entered for active or completed exams. Current status: ' . $exam->exam_status]);
         }
 
-        // Get students eligible for this exam
-        $students = $exam->getEligibleStudents()->load('user');
+        // Get students based on user role and subject assignments
+        if ($user->hasRole('school_admin')) {
+            // School admin sees all eligible students
+            $students = $exam->getEligibleStudents()->load('user');
+            $teacherStreams = null;
+        } else {
+            // Teachers see only students from streams they teach this subject in
+            $teacherStreams = $this->getTeacherStreamsForSubject($user->id, $subject->id, $exam);
+            $students = $this->getStudentsForTeacherStreams($exam, $teacherStreams)->load('user');
+        }
         
         // Get exam papers for this subject
         $examPapers = $exam->examPapers()->where('subject_id', $subject->id)->get();
@@ -537,18 +548,54 @@ class ExamController extends Controller
         // Get existing results
         $existingResults = ExamResult::where('exam_id', $exam->id)
             ->where('subject_id', $subject->id)
+            ->whereIn('student_id', $students->pluck('id'))
             ->with('paperResults')
             ->get()
             ->keyBy('student_id');
+
+        // Group students by class/stream for better organization
+        $studentsByStream = $students->groupBy(function($student) {
+            return $student->class->name . ' - ' . ($student->stream->name ?? 'No Stream');
+        });
 
         return Inertia::render('SchoolAdmin/Exams/EnterResults', [
             'school' => $school,
             'exam' => $exam,
             'subject' => $subject,
             'students' => $students,
+            'studentsByStream' => $studentsByStream,
             'examPapers' => $examPapers,
             'existingResults' => $existingResults,
+            'teacherStreams' => $teacherStreams,
+            'userRole' => $user->hasRole('school_admin') ? 'school_admin' : 'teacher',
         ]);
+    }
+
+    // Add these helper methods to ExamController
+    private function getTeacherStreamsForSubject($teacherId, $subjectId, $exam)
+    {
+        // Get streams where this teacher teaches this subject and are part of the exam
+        return SubjectTeacherStream::where('teacher_id', $teacherId)
+            ->where('subject_id', $subjectId)
+            ->whereHas('stream.class', function($query) use ($exam) {
+                $query->whereIn('school_classes.id', $exam->classes()->pluck('school_classes.id'));
+            })
+            ->with(['stream.class'])
+            ->get();
+    }
+
+    private function getStudentsForTeacherStreams($exam, $teacherStreams)
+    {
+        if (!$teacherStreams || $teacherStreams->isEmpty()) {
+            return collect([]);
+        }
+
+        $streamIds = $teacherStreams->pluck('stream_id');
+        
+        return Student::whereIn('stream_id', $streamIds)
+            ->whereIn('class_id', $exam->classes()->pluck('school_classes.id'))
+            ->with(['user', 'class', 'stream'])
+            ->get();
     }
 
     public function storeResults(Request $request, School $school, Exam $exam, Subject $subject)

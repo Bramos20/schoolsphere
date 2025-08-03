@@ -95,16 +95,45 @@ class Exam extends Model
     public function getSubjectsForTeacher($teacherId)
     {
         return $this->subjects()->whereHas('streamAssignments', function ($query) use ($teacherId) {
-            $query->where('teacher_id', $teacherId);
-        })->get();
+            $query->where('teacher_id', $teacherId)
+                ->whereHas('stream.class', function($q) {
+                    $q->whereIn('school_classes.id', $this->classes()->pluck('school_classes.id'));
+                });
+        })->with(['streamAssignments' => function($query) use ($teacherId) {
+            $query->where('teacher_id', $teacherId)
+                ->with(['stream.class']);
+        }])->get();
     }
 
     // Check if a teacher can enter results for a specific subject
-    public function canTeacherEnterResults($teacherId, $subjectId)
+   public function canTeacherEnterResults($teacherId, $subjectId)
     {
         return SubjectTeacherStream::where('teacher_id', $teacherId)
-                                  ->where('subject_id', $subjectId)
-                                  ->exists();
+            ->where('subject_id', $subjectId)
+            ->whereHas('stream.class', function($query) {
+                $query->whereIn('school_classes.id', $this->classes()->pluck('school_classes.id'));
+            })
+            ->exists();
+    }
+
+    public function getEligibleStudentsForTeacherSubject($teacherId, $subjectId)
+    {
+        // Get streams where this teacher teaches this subject
+        $teacherStreams = SubjectTeacherStream::where('teacher_id', $teacherId)
+            ->where('subject_id', $subjectId)
+            ->whereHas('stream.class', function($query) {
+                $query->whereIn('school_classes.id', $this->classes()->pluck('school_classes.id'));
+            })
+            ->pluck('stream_id');
+
+        if ($teacherStreams->isEmpty()) {
+            return collect([]);
+        }
+
+        return Student::whereIn('stream_id', $teacherStreams)
+            ->whereIn('class_id', $this->classes()->pluck('school_classes.id'))
+            ->with(['user', 'class', 'stream'])
+            ->get();
     }
 
     // Calculate comprehensive statistics
