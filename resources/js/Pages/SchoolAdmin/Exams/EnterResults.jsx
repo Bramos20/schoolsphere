@@ -8,7 +8,6 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
     Save, 
@@ -16,11 +15,7 @@ import {
     CheckCircle, 
     Users, 
     FileText,
-    ArrowLeft,
-    Calculator,
-    Eye,
-    EyeOff,
-    Filter
+    ArrowLeft
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -40,18 +35,43 @@ export default function EnterResults({
     const [showAbsentOnly, setShowAbsentOnly] = useState(false);
     const [showCompletedOnly, setShowCompletedOnly] = useState(false);
     const [selectedStream, setSelectedStream] = useState('all');
-    const [bulkAction, setBulkAction] = useState('');
     
-    const { data, setData, post, processing, errors, reset } = useForm({
+    // FRONTEND FIX: Create virtual paper if no papers exist
+    const effectivePapers = examPapers && examPapers.length > 0 
+        ? examPapers 
+        : [{
+            id: 'virtual-paper',
+            paper_name: subject.name,
+            total_marks: 100, // Default marks
+            pass_mark: 40,
+            percentage_weight: 100,
+            duration_minutes: 120
+        }];
+
+    const isVirtualPaper = examPapers.length === 0;
+    
+    const { data, setData, post, processing, errors } = useForm({
         results: students.map(student => {
             const existingResult = existingResults[student.id];
-            const paperResults = examPapers.map(paper => {
-                const existingPaper = existingResult?.paper_results?.find(pr => pr.exam_paper_id === paper.id);
-                return {
-                    exam_paper_id: paper.id,
-                    marks: existingPaper?.marks || '',
-                    is_absent: existingPaper?.is_absent || false
-                };
+            
+            // Handle both real papers and virtual paper
+            const paperResults = effectivePapers.map(paper => {
+                if (isVirtualPaper) {
+                    // For virtual paper, use the total_marks from existing result
+                    return {
+                        exam_paper_id: null, // No real paper ID
+                        marks: existingResult?.total_marks || '',
+                        is_absent: existingResult?.is_absent || false
+                    };
+                } else {
+                    // For real papers, use existing logic
+                    const existingPaper = existingResult?.paper_results?.find(pr => pr.exam_paper_id === paper.id);
+                    return {
+                        exam_paper_id: paper.id,
+                        marks: existingPaper?.marks || '',
+                        is_absent: existingPaper?.is_absent || false
+                    };
+                }
             });
 
             return {
@@ -70,7 +90,6 @@ export default function EnterResults({
         const newResults = [...data.results];
         newResults[studentIndex].is_absent = isAbsent;
         
-        // If marking as absent, clear all paper marks
         if (isAbsent) {
             newResults[studentIndex].paper_results = newResults[studentIndex].paper_results.map(paper => ({
                 ...paper,
@@ -78,7 +97,6 @@ export default function EnterResults({
                 is_absent: true
             }));
         } else {
-            // If unmarking absent, set paper results to not absent
             newResults[studentIndex].paper_results = newResults[studentIndex].paper_results.map(paper => ({
                 ...paper,
                 is_absent: false
@@ -97,19 +115,23 @@ export default function EnterResults({
     const calculateTotalMarks = (studentResult) => {
         if (studentResult.is_absent) return 0;
         
-        let totalWeighted = 0;
-        studentResult.paper_results.forEach((paperResult, index) => {
-            const paper = examPapers[index];
-            const marks = parseFloat(paperResult.marks) || 0;
-            const weight = paper.percentage_weight / 100;
-            totalWeighted += marks * weight;
-        });
-        
-        return Math.round(totalWeighted * 100) / 100;
+        if (isVirtualPaper) {
+            // For virtual paper, the marks IS the total
+            return parseFloat(studentResult.paper_results[0]?.marks) || 0;
+        } else {
+            // For real papers, calculate weighted total
+            let totalWeighted = 0;
+            studentResult.paper_results.forEach((paperResult, index) => {
+                const paper = effectivePapers[index];
+                const marks = parseFloat(paperResult.marks) || 0;
+                const weight = paper.percentage_weight / 100;
+                totalWeighted += marks * weight;
+            });
+            return Math.round(totalWeighted * 100) / 100;
+        }
     };
 
     const getGradeForMarks = (marks) => {
-        // This would typically come from your grading system
         if (marks >= 80) return { grade: 'A', color: 'bg-green-500' };
         if (marks >= 75) return { grade: 'A-', color: 'bg-green-400' };
         if (marks >= 70) return { grade: 'B+', color: 'bg-blue-500' };
@@ -143,7 +165,28 @@ export default function EnterResults({
             return;
         }
 
+        // Transform data for backend - handle virtual papers
+        const transformedResults = data.results.map(result => {
+            if (isVirtualPaper) {
+                // For virtual papers, send as single marks value
+                return {
+                    student_id: result.student_id,
+                    is_absent: result.is_absent,
+                    total_marks: result.is_absent ? 0 : parseFloat(result.paper_results[0]?.marks) || 0
+                };
+            } else {
+                // For real papers, send paper results as normal
+                return {
+                    student_id: result.student_id,
+                    is_absent: result.is_absent,
+                    paper_results: result.paper_results.filter(pr => pr.exam_paper_id) // Remove virtual papers
+                };
+            }
+        });
+
         post(route('exams.store-results', [school.id, exam.id, subject.id]), {
+            results: transformedResults
+        }, {
             onSuccess: () => {
                 toast.success('Results saved successfully!');
             },
@@ -182,16 +225,13 @@ export default function EnterResults({
     const filteredStudents = students.filter((student, index) => {
         const result = data.results[index];
         
-        // Stream filter
         if (selectedStream !== 'all') {
             const studentStream = `${student.class.name} - ${student.stream?.name ?? 'No Stream'}`;
             if (studentStream !== selectedStream) return false;
         }
         
-        // Absent filter
         if (showAbsentOnly && !result.is_absent) return false;
         
-        // Completed filter
         if (showCompletedOnly) {
             const isComplete = result.is_absent || result.paper_results.every(paper => paper.marks && paper.marks !== '');
             if (!isComplete) return false;
@@ -244,24 +284,6 @@ export default function EnterResults({
                                 )}
                             </AlertDescription>
                         </Alert>
-                        
-                        {teacherStreams && teacherStreams.length > 0 && (
-                            <Card className="mt-6">
-                                <CardHeader>
-                                    <CardTitle>Your Assigned Streams</CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="space-y-2">
-                                        {teacherStreams.map((assignment, index) => (
-                                            <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                                <span>{assignment.stream.class.name} - {assignment.stream.name}</span>
-                                                <Badge variant="secondary">No students in exam</Badge>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        )}
                     </div>
                 </div>
             </AppLayout>
@@ -283,6 +305,11 @@ export default function EnterResults({
                         {userRole === 'teacher' && (
                             <p className="text-xs text-blue-600 mt-1">
                                 You can only enter results for students in your assigned streams
+                            </p>
+                        )}
+                        {isVirtualPaper && (
+                            <p className="text-xs text-purple-600 mt-1">
+                                Single paper subject - enter total marks directly
                             </p>
                         )}
                     </div>
@@ -345,7 +372,9 @@ export default function EnterResults({
                                     <FileText className="w-5 h-5 text-purple-500" />
                                     <div>
                                         <p className="text-sm font-medium">Papers</p>
-                                        <p className="text-2xl font-bold">{examPapers.length}</p>
+                                        <p className="text-2xl font-bold">
+                                            {isVirtualPaper ? '1 (Single)' : effectivePapers.length}
+                                        </p>
                                     </div>
                                 </div>
                             </CardContent>
@@ -356,7 +385,6 @@ export default function EnterResults({
                     <Card>
                         <CardContent className="p-4">
                             <div className="flex flex-wrap items-center gap-4">
-                                {/* Stream Filter - Only show if multiple streams */}
                                 {streamOptions.length > 1 && (
                                     <div className="flex items-center space-x-2">
                                         <Label htmlFor="stream-filter">Filter by Stream:</Label>
@@ -419,196 +447,152 @@ export default function EnterResults({
                         </CardContent>
                     </Card>
 
-                    {/* Your Assigned Streams Info (for teachers) */}
-                    {userRole === 'teacher' && teacherStreams && teacherStreams.length > 0 && (
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-lg">Your Assigned Streams</CardTitle>
-                                <CardDescription>
-                                    You can enter results for students in these streams only
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                    {teacherStreams.map((assignment, index) => {
-                                        const streamKey = `${assignment.stream.class.name} - ${assignment.stream.name}`;
-                                        const studentCount = studentsByStream[streamKey]?.length || 0;
-                                        return (
-                                            <div key={index} className="p-3 border rounded-lg">
-                                                <h4 className="font-medium">{assignment.stream.class.name}</h4>
-                                                <p className="text-sm text-gray-600">{assignment.stream.name}</p>
-                                                <Badge variant={studentCount > 0 ? "default" : "secondary"} className="mt-2">
-                                                    {studentCount} students
-                                                </Badge>
-                                            </div>
-                                        );
-                                    })}
+                    {/* Results Entry */}
+                    <Card>
+                        <CardHeader>
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <CardTitle>Enter Results</CardTitle>
+                                    <CardDescription>
+                                        {filteredStudents.length} of {students.length} students shown
+                                        {isVirtualPaper && (
+                                            <span className="block text-purple-600 mt-1">
+                                                Single paper subject - enter total marks out of {effectivePapers[0].total_marks}
+                                            </span>
+                                        )}
+                                    </CardDescription>
                                 </div>
-                            </CardContent>
-                        </Card>
-                    )}
-
-                    {/* Paper Information */}
-                    {examPapers.length > 1 && (
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-lg">Paper Information</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                    {examPapers.map((paper, index) => (
-                                        <div key={paper.id} className="p-3 border rounded-lg">
-                                            <h4 className="font-medium">{paper.paper_name}</h4>
-                                            <div className="text-sm text-gray-600 space-y-1">
-                                                <p>Total Marks: {paper.total_marks}</p>
-                                                <p>Pass Mark: {paper.pass_mark}</p>
-                                                <p>Weight: {paper.percentage_weight}%</p>
-                                                <p>Duration: {Math.floor(paper.duration_minutes / 60)}h {paper.duration_minutes % 60}m</p>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </CardContent>
-                        </Card>
-                    )}
-
-                    {/* Results Entry Form */}
-                    <form onSubmit={handleSubmit}>
-                        <Card>
-                            <CardHeader>
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <CardTitle>Enter Results</CardTitle>
-                                        <CardDescription>
-                                            {filteredStudents.length} of {students.length} students shown
-                                        </CardDescription>
-                                    </div>
-                                    <Button type="submit" disabled={processing}>
-                                        <Save className="w-4 h-4 mr-2" />
-                                        {processing ? 'Saving...' : 'Save Results'}
-                                    </Button>
-                                </div>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="overflow-x-auto">
-                                    <table className="w-full border-collapse">
-                                        <thead>
-                                            <tr className="border-b">
-                                                <th className="text-left p-3 w-8">
-                                                    <Checkbox
-                                                        checked={selectedStudents.size === filteredStudents.length && filteredStudents.length > 0}
-                                                        onCheckedChange={(checked) => {
-                                                            if (checked) {
-                                                                const newSelection = new Set();
-                                                                filteredStudents.forEach((_, index) => {
-                                                                    const originalIndex = students.indexOf(students.find(s => s.id === filteredStudents[index].id));
-                                                                    newSelection.add(originalIndex);
-                                                                });
-                                                                setSelectedStudents(newSelection);
-                                                            } else {
-                                                                setSelectedStudents(new Set());
-                                                            }
-                                                        }}
-                                                    />
+                                <Button onClick={handleSubmit} disabled={processing}>
+                                    <Save className="w-4 h-4 mr-2" />
+                                    {processing ? 'Saving...' : 'Save Results'}
+                                </Button>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="overflow-x-auto">
+                                <table className="w-full border-collapse">
+                                    <thead>
+                                        <tr className="border-b">
+                                            <th className="text-left p-3 w-8">
+                                                <Checkbox
+                                                    checked={selectedStudents.size === filteredStudents.length && filteredStudents.length > 0}
+                                                    onCheckedChange={(checked) => {
+                                                        if (checked) {
+                                                            const newSelection = new Set();
+                                                            filteredStudents.forEach((_, index) => {
+                                                                const originalIndex = students.indexOf(students.find(s => s.id === filteredStudents[index].id));
+                                                                newSelection.add(originalIndex);
+                                                            });
+                                                            setSelectedStudents(newSelection);
+                                                        } else {
+                                                            setSelectedStudents(new Set());
+                                                        }
+                                                    }}
+                                                />
+                                            </th>
+                                            <th className="text-left p-3 min-w-[200px]">Student</th>
+                                            <th className="text-left p-3 w-20">Absent</th>
+                                            {effectivePapers.map((paper) => (
+                                                <th key={paper.id} className="text-left p-3 min-w-[120px]">
+                                                    <div>
+                                                        <div className="font-medium">{paper.paper_name}</div>
+                                                        <div className="text-xs text-gray-500">/{paper.total_marks}</div>
+                                                        {isVirtualPaper && (
+                                                            <div className="text-xs text-purple-600">Total Marks</div>
+                                                        )}
+                                                    </div>
                                                 </th>
-                                                <th className="text-left p-3 min-w-[200px]">Student</th>
-                                                <th className="text-left p-3 w-20">Absent</th>
-                                                {examPapers.map((paper) => (
-                                                    <th key={paper.id} className="text-left p-3 min-w-[120px]">
-                                                        <div>
-                                                            <div className="font-medium">{paper.paper_name}</div>
-                                                            <div className="text-xs text-gray-500">/{paper.total_marks}</div>
-                                                        </div>
-                                                    </th>
-                                                ))}
+                                            ))}
+                                            {!isVirtualPaper && (
                                                 <th className="text-left p-3 w-24">Total</th>
-                                                <th className="text-left p-3 w-16">Grade</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {filteredStudents.map((student, filteredIndex) => {
-                                                const originalIndex = students.findIndex(s => s.id === student.id);
-                                                const result = data.results[originalIndex];
-                                                const totalMarks = calculateTotalMarks(result);
-                                                const grade = getGradeForMarks(totalMarks);
-                                                
-                                                return (
-                                                    <tr key={student.id} className="border-b hover:bg-gray-50">
-                                                        <td className="p-3">
-                                                            <Checkbox
-                                                                checked={selectedStudents.has(originalIndex)}
-                                                                onCheckedChange={(checked) => {
-                                                                    const newSelection = new Set(selectedStudents);
-                                                                    if (checked) {
-                                                                        newSelection.add(originalIndex);
-                                                                    } else {
-                                                                        newSelection.delete(originalIndex);
-                                                                    }
-                                                                    setSelectedStudents(newSelection);
-                                                                }}
-                                                            />
-                                                        </td>
-                                                        <td className="p-3">
-                                                            <div>
-                                                                <div className="font-medium">{student.user.name}</div>
-                                                                <div className="text-sm text-gray-600">
-                                                                    {student.class?.name} {student.stream?.name}
-                                                                </div>
+                                            )}
+                                            <th className="text-left p-3 w-16">Grade</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {filteredStudents.map((student, filteredIndex) => {
+                                            const originalIndex = students.findIndex(s => s.id === student.id);
+                                            const result = data.results[originalIndex];
+                                            const totalMarks = calculateTotalMarks(result);
+                                            const grade = getGradeForMarks(totalMarks);
+                                            
+                                            return (
+                                                <tr key={student.id} className="border-b hover:bg-gray-50">
+                                                    <td className="p-3">
+                                                        <Checkbox
+                                                            checked={selectedStudents.has(originalIndex)}
+                                                            onCheckedChange={(checked) => {
+                                                                const newSelection = new Set(selectedStudents);
+                                                                if (checked) {
+                                                                    newSelection.add(originalIndex);
+                                                                } else {
+                                                                    newSelection.delete(originalIndex);
+                                                                }
+                                                                setSelectedStudents(newSelection);
+                                                            }}
+                                                        />
+                                                    </td>
+                                                    <td className="p-3">
+                                                        <div>
+                                                            <div className="font-medium">{student.user.name}</div>
+                                                            <div className="text-sm text-gray-600">
+                                                                {student.class?.name} {student.stream?.name}
                                                             </div>
-                                                        </td>
-                                                        <td className="p-3">
-                                                            <Checkbox
-                                                                checked={result.is_absent}
-                                                                onCheckedChange={(checked) => handleStudentAbsentChange(originalIndex, checked)}
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-3">
+                                                        <Checkbox
+                                                            checked={result.is_absent}
+                                                            onCheckedChange={(checked) => handleStudentAbsentChange(originalIndex, checked)}
+                                                        />
+                                                    </td>
+                                                    {effectivePapers.map((paper, paperIndex) => (
+                                                        <td key={paper.id} className="p-3">
+                                                            <Input
+                                                                type="number"
+                                                                min="0"
+                                                                max={paper.total_marks}
+                                                                step="0.01"
+                                                                value={result.paper_results[paperIndex]?.marks || ''}
+                                                                onChange={(e) => handlePaperMarksChange(originalIndex, paperIndex, e.target.value)}
+                                                                disabled={result.is_absent}
+                                                                className="w-20"
+                                                                placeholder="0"
                                                             />
                                                         </td>
-                                                        {examPapers.map((paper, paperIndex) => (
-                                                            <td key={paper.id} className="p-3">
-                                                                <Input
-                                                                    type="number"
-                                                                    min="0"
-                                                                    max={paper.total_marks}
-                                                                    step="0.01"
-                                                                    value={result.paper_results[paperIndex]?.marks || ''}
-                                                                    onChange={(e) => handlePaperMarksChange(originalIndex, paperIndex, e.target.value)}
-                                                                    disabled={result.is_absent}
-                                                                    className="w-20"
-                                                                    placeholder="0"
-                                                                />
-                                                            </td>
-                                                        ))}
+                                                    ))}
+                                                    {!isVirtualPaper && (
                                                         <td className="p-3">
                                                             <span className="font-medium">
                                                                 {result.is_absent ? 'ABS' : totalMarks.toFixed(1)}
                                                             </span>
                                                         </td>
-                                                        <td className="p-3">
-                                                            {!result.is_absent && (
-                                                                <Badge className={`${grade.color} text-white`}>
-                                                                    {grade.grade}
-                                                                </Badge>
-                                                            )}
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
+                                                    )}
+                                                    <td className="p-3">
+                                                        {!result.is_absent && (
+                                                            <Badge className={`${grade.color} text-white`}>
+                                                                {grade.grade}
+                                                            </Badge>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            {filteredStudents.length === 0 && (
+                                <div className="text-center py-8 text-gray-500">
+                                    No students match the current filters.
                                 </div>
-                                
-                                {filteredStudents.length === 0 && (
-                                    <div className="text-center py-8 text-gray-500">
-                                        No students match the current filters.
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
-                    </form>
+                            )}
+                        </CardContent>
+                    </Card>
 
                     {/* Save Button - Fixed at bottom on mobile */}
                     <div className="sticky bottom-4 flex justify-end">
                         <Button 
-                            type="submit" 
                             size="lg"
                             disabled={processing}
                             onClick={handleSubmit}

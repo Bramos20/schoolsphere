@@ -598,6 +598,73 @@ class ExamController extends Controller
             ->get();
     }
 
+    // public function storeResults(Request $request, School $school, Exam $exam, Subject $subject)
+    // {
+    //     $user = auth()->user();
+        
+    //     // Authorization check
+    //     if (!$user->hasRole('school_admin') && !$exam->canTeacherEnterResults($user->id, $subject->id)) {
+    //         abort(403, 'You are not authorized to enter results for this subject.');
+    //     }
+
+    //     $request->validate([
+    //         'results' => 'required|array',
+    //         'results.*.student_id' => 'required|exists:students,id',
+    //         'results.*.is_absent' => 'boolean',
+    //         'results.*.paper_results' => 'array',
+    //         'results.*.paper_results.*.exam_paper_id' => 'required|exists:exam_papers,id',
+    //         'results.*.paper_results.*.marks' => 'required_unless:results.*.is_absent,true|numeric|min:0',
+    //     ]);
+
+    //     DB::transaction(function () use ($request, $exam, $subject, $user) {
+    //         foreach ($request->results as $resultData) {
+    //             // Create or update exam result
+    //             $examResult = ExamResult::updateOrCreate(
+    //                 [
+    //                     'exam_id' => $exam->id,
+    //                     'student_id' => $resultData['student_id'],
+    //                     'subject_id' => $subject->id,
+    //                 ],
+    //                 [
+    //                     'is_absent' => $resultData['is_absent'] ?? false,
+    //                     'entered_by' => $user->id,
+    //                     'entered_at' => now(),
+    //                 ]
+    //             );
+
+    //             // Handle paper results if not absent
+    //             if (!($resultData['is_absent'] ?? false)) {
+    //                 foreach ($resultData['paper_results'] ?? [] as $paperResult) {
+    //                     ExamPaperResult::updateOrCreate(
+    //                         [
+    //                             'exam_result_id' => $examResult->id,
+    //                             'exam_paper_id' => $paperResult['exam_paper_id'],
+    //                             'student_id' => $resultData['student_id'],
+    //                         ],
+    //                         [
+    //                             'marks' => $paperResult['marks'],
+    //                             'is_absent' => false,
+    //                             'entered_by' => $user->id,
+    //                             'entered_at' => now(),
+    //                         ]
+    //                     );
+    //                 }
+
+    //                 // Calculate total marks and assign grade
+    //                 $examResult->total_marks = $examResult->calculateTotalMarks();
+    //                 $examResult->assignGrade();
+    //                 $examResult->save();
+    //             }
+    //         }
+
+    //         // Calculate positions for this subject
+    //         $this->calculateSubjectPositions($exam, $subject);
+    //     });
+
+    //     return redirect()->route('exams.show', [$school, $exam])
+    //         ->with('success', 'Results entered successfully.');
+    // }
+    // Update your storeResults method in ExamController.php to handle virtual papers
     public function storeResults(Request $request, School $school, Exam $exam, Subject $subject)
     {
         $user = auth()->user();
@@ -607,16 +674,30 @@ class ExamController extends Controller
             abort(403, 'You are not authorized to enter results for this subject.');
         }
 
-        $request->validate([
-            'results' => 'required|array',
-            'results.*.student_id' => 'required|exists:students,id',
-            'results.*.is_absent' => 'boolean',
-            'results.*.paper_results' => 'array',
-            'results.*.paper_results.*.exam_paper_id' => 'required|exists:exam_papers,id',
-            'results.*.paper_results.*.marks' => 'required_unless:results.*.is_absent,true|numeric|min:0',
-        ]);
+        // Check if this subject has actual exam papers
+        $hasExamPapers = $exam->examPapers()->where('subject_id', $subject->id)->exists();
 
-        DB::transaction(function () use ($request, $exam, $subject, $user) {
+        if ($hasExamPapers) {
+            // Normal validation for subjects with papers
+            $request->validate([
+                'results' => 'required|array',
+                'results.*.student_id' => 'required|exists:students,id',
+                'results.*.is_absent' => 'boolean',
+                'results.*.paper_results' => 'array',
+                'results.*.paper_results.*.exam_paper_id' => 'required|exists:exam_papers,id',
+                'results.*.paper_results.*.marks' => 'required_unless:results.*.is_absent,true|numeric|min:0',
+            ]);
+        } else {
+            // Validation for single-paper subjects (virtual papers)
+            $request->validate([
+                'results' => 'required|array',
+                'results.*.student_id' => 'required|exists:students,id',
+                'results.*.is_absent' => 'boolean',
+                'results.*.total_marks' => 'required_unless:results.*.is_absent,true|numeric|min:0',
+            ]);
+        }
+
+        DB::transaction(function () use ($request, $exam, $subject, $user, $hasExamPapers) {
             foreach ($request->results as $resultData) {
                 // Create or update exam result
                 $examResult = ExamResult::updateOrCreate(
@@ -634,24 +715,31 @@ class ExamController extends Controller
 
                 // Handle paper results if not absent
                 if (!($resultData['is_absent'] ?? false)) {
-                    foreach ($resultData['paper_results'] ?? [] as $paperResult) {
-                        ExamPaperResult::updateOrCreate(
-                            [
-                                'exam_result_id' => $examResult->id,
-                                'exam_paper_id' => $paperResult['exam_paper_id'],
-                                'student_id' => $resultData['student_id'],
-                            ],
-                            [
-                                'marks' => $paperResult['marks'],
-                                'is_absent' => false,
-                                'entered_by' => $user->id,
-                                'entered_at' => now(),
-                            ]
-                        );
-                    }
+                    if ($hasExamPapers) {
+                        // Normal paper results handling
+                        foreach ($resultData['paper_results'] ?? [] as $paperResult) {
+                            ExamPaperResult::updateOrCreate(
+                                [
+                                    'exam_result_id' => $examResult->id,
+                                    'exam_paper_id' => $paperResult['exam_paper_id'],
+                                    'student_id' => $resultData['student_id'],
+                                ],
+                                [
+                                    'marks' => $paperResult['marks'],
+                                    'is_absent' => false,
+                                    'entered_by' => $user->id,
+                                    'entered_at' => now(),
+                                ]
+                            );
+                        }
 
-                    // Calculate total marks and assign grade
-                    $examResult->total_marks = $examResult->calculateTotalMarks();
+                        // Calculate total marks and assign grade
+                        $examResult->total_marks = $examResult->calculateTotalMarks();
+                    } else {
+                        // For virtual papers, directly set the total marks
+                        $examResult->total_marks = $resultData['total_marks'];
+                    }
+                    
                     $examResult->assignGrade();
                     $examResult->save();
                 }
